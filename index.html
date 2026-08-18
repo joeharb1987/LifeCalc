@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F5F1E7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">
+<title>Calc</title>
+<style>
+  :root{
+    --bg: #F5F1E7;
+    --panel: #1B2340;
+    --key: #FFFFFF;
+    --key-border: #E4DFD1;
+    --amber: #C9954B;
+    --text: #1B2340;
+    --text-dim: #8C8878;
+    --text-on-navy: #F5F1E7;
+    --radius: 18px;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    overscroll-behavior: none;
+    user-select: none;
+  }
+  .app{
+    max-width: 480px;
+    margin: 0 auto;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 14px);
+    position: relative;
+  }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 10px 4px 4px;
+    gap: 8px;
+  }
+  .mode-toggle{
+    display:flex; background: #FFFFFF; border-radius: 999px; padding: 3px;
+    border: 1px solid var(--key-border);
+    flex: 1;
+    min-width: 0;
+  }
+  .mode-toggle button{
+    border:none; background: transparent; color: var(--text-dim);
+    font-size: 12px; padding: 7px 8px; border-radius: 999px; font-weight: 600;
+    letter-spacing: .01em; flex: 1; min-width: 0;
+  }
+  .mode-toggle button.active{ background: var(--panel); color: var(--text-on-navy); }
+  .icon-btn, .history-btn{
+    width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto;
+    background: #FFFFFF; border: 1px solid var(--key-border); color: var(--text-dim);
+    display:flex; align-items:center; justify-content:center; font-size: 15px;
+  }
+
+  .display{
+    flex: 0 0 auto;
+    background: var(--panel);
+    border-radius: var(--radius);
+    margin: 10px 0 14px;
+    padding: 22px 20px 18px;
+    position: relative;
+    min-height: 132px;
+    display:flex; flex-direction:column; justify-content:flex-end;
+  }
+  .expr{
+    font-family: "SF Mono", "JetBrains Mono", monospace;
+    font-size: 15px;
+    color: #9AA1C4;
+    min-height: 20px;
+    text-align: right;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    letter-spacing: .01em;
+  }
+  .expr::-webkit-scrollbar{ display:none; }
+  .result{
+    font-family: "SF Mono", "JetBrains Mono", monospace;
+    font-size: 52px;
+    font-weight: 500;
+    color: var(--text-on-navy);
+    text-align: right;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-top: 6px;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .result::-webkit-scrollbar{ display:none; }
+  .result.small{ font-size: 34px; }
+
+  .history-panel{
+    position:absolute; inset: 0 0 0 0;
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display:none;
+    flex-direction: column;
+    z-index: 5;
+  }
+  .history-panel.open{ display:flex; }
+  .history-panel h3{
+    margin:0 0 8px; font-size:13px; color: #9AA1C4; font-weight:600;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .history-panel h3 span.clear{ color: #E0937E; font-weight:600; }
+  .history-list{ overflow-y:auto; flex:1; display:flex; flex-direction:column-reverse; gap:2px; }
+  .history-item{ padding: 8px 4px; border-bottom: 1px solid #2A3260; text-align:right; }
+  .history-item .h-expr{ font-family: "SF Mono", monospace; font-size:12px; color:#9AA1C4; }
+  .history-item .h-res{ font-family: "SF Mono", monospace; font-size:18px; color: var(--text-on-navy); }
+  .history-empty{ color: #9AA1C4; font-size: 13px; text-align:center; margin-top: 40px; }
+
+  .toast{
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%) translateY(8px);
+    background: rgba(0,0,0,0.78); color:#fff; font-size:12px; font-weight:600;
+    padding:7px 16px; border-radius:999px; opacity:0;
+    transition: opacity .18s ease, transform .18s ease; pointer-events:none; z-index:30;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .paste-overlay{
+    position:absolute; top: calc(env(safe-area-inset-top) + 54px); left:14px; right:14px;
+    z-index:20; display:none;
+  }
+  .paste-overlay.open{ display:block; }
+  .paste-overlay input{
+    width:100%; height:46px; border-radius:14px; border:1px solid var(--key-border);
+    background:#fff; padding:0 14px; font-size:16px; color:var(--text);
+    box-shadow:0 8px 20px rgba(27,35,64,0.18);
+  }
+  .paste-overlay input:focus{ outline: 2px solid var(--amber); }
+
+  .pad{
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .pad.basic{ grid-template-rows: repeat(5, 1fr); }
+  .pad.sci{ grid-template-rows: repeat(7, 1fr); }
+
+  button.key{
+    border: 1px solid var(--key-border);
+    border-radius: 16px;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text);
+    background: var(--key);
+    display:flex; align-items:center; justify-content:center;
+    position: relative;
+    transition: transform .05s ease;
+  }
+  button.key:active{ transform: scale(0.94); }
+  .k-fn{ background: #FFFFFF; color: var(--text-dim); font-size: 18px; border-color: var(--key-border); }
+  .k-op{ background: var(--panel); color: var(--amber); font-size: 24px; border: none; }
+  .k-eq{ background: var(--amber); color: #FFFFFF; font-weight: 700; border: none; }
+  .k-sci{ background: #FFFFFF; color: var(--text-dim); font-size: 14px; }
+  .k-wide{ grid-column: span 2; justify-content:flex-start; padding-left: 26px; }
+
+  .convert-panel{
+    flex: 1; display:flex; flex-direction:column; gap:12px; min-height:0; overflow:hidden;
+  }
+  .cat-row{ display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+  .cat-row::-webkit-scrollbar{ display:none; }
+  .cat-chip{
+    flex:0 0 auto; padding:8px 16px; border-radius:999px; background:#fff;
+    border:1px solid var(--key-border); color:var(--text-dim); font-size:13px; font-weight:600;
+  }
+  .cat-chip.active{ background: var(--panel); color: var(--text-on-navy); border-color: var(--panel); }
+
+  .conv-card{
+    background:#fff; border:1px solid var(--key-border); border-radius:16px; padding:12px 16px;
+  }
+  .conv-card label{ font-size:11px; color:var(--text-dim); font-weight:600; letter-spacing:.02em; display:block; margin-bottom:4px; }
+  .conv-card select{
+    width:100%; border:none; background:transparent; font-size:14px; font-weight:600;
+    color:var(--text); margin-bottom:6px; -webkit-appearance:none; appearance:none; padding:2px 0;
+  }
+  .conv-card input.conv-value{
+    width:100%; border:none; background:transparent; font-family:"SF Mono","JetBrains Mono",monospace;
+    font-size:28px; font-weight:500; color:var(--text); user-select:text; -webkit-user-select:text;
+  }
+  .conv-card input.conv-value:focus{ outline:none; }
+
+  .swap-row{ display:flex; align-items:center; justify-content:center; margin: -4px 0; }
+  .swap-btn{
+    width:38px; height:38px; border-radius:50%; background:var(--amber); border:none;
+    color:#fff; font-size:16px; display:flex; align-items:center; justify-content:center;
+  }
+  .swap-btn:active{ transform: scale(0.92); }
+
+  .conv-result{
+    background: var(--panel); border-radius: var(--radius); padding: 16px 18px;
+    margin-top: auto;
+  }
+  .conv-result .r-unit{ font-size:12px; color:#9AA1C4; font-weight:600; margin-bottom:2px; }
+  .conv-result .r-value{
+    font-family:"SF Mono","JetBrains Mono",monospace; font-size:34px; font-weight:500;
+    color: var(--text-on-navy); word-break: break-all; user-select:text; -webkit-user-select:text;
+  }
+
+  @media (max-height: 700px){
+    .display{ min-height: 100px; padding: 16px 18px 14px; }
+    .result{ font-size: 40px; }
+    button.key{ font-size: 19px; border-radius: 14px; }
+    .k-sci{ font-size: 12px; }
+    .conv-result .r-value{ font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="mode-toggle">
+      <button id="modeBasic" class="active">Basic</button>
+      <button id="modeSci">Scientific</button>
+      <button id="modeConvert">Convert</button>
+    </div>
+    <button class="icon-btn" id="pasteBtn" aria-label="Paste">&#9099;</button>
+    <button class="history-btn" id="historyBtn" aria-label="History">&#8635;</button>
+  </div>
+
+  <div class="paste-overlay" id="pasteOverlay">
+    <input type="text" id="pasteInput" inputmode="decimal" autocomplete="off" placeholder="Tap and hold to paste a number">
+  </div>
+
+  <div class="display" id="displayPanel">
+    <div class="expr" id="exprEl">&nbsp;</div>
+    <div class="result" id="resultEl">0</div>
+    <div class="toast" id="toastEl">Copied</div>
+
+    <div class="history-panel" id="historyPanel">
+      <h3>History <span class="clear" id="clearHistory">Clear</span></h3>
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+
+  <div class="pad basic" id="padBasic">
+    <button class="key k-fn" data-act="clear">AC</button>
+    <button class="key k-fn" data-act="sign">&plusmn;</button>
+    <button class="key k-fn" data-act="percent">%</button>
+    <button class="key k-op" data-act="op" data-val="&divide;">&divide;</button>
+
+    <button class="key" data-act="digit" data-val="7">7</button>
+    <button class="key" data-act="digit" data-val="8">8</button>
+    <button class="key" data-act="digit" data-val="9">9</button>
+    <button class="key k-op" data-act="op" data-val="&times;">&times;</button>
+
+    <button class="key" data-act="digit" data-val="4">4</button>
+    <button class="key" data-act="digit" data-val="5">5</button>
+    <button class="key" data-act="digit" data-val="6">6</button>
+    <button class="key k-op" data-act="op" data-val="&minus;">&minus;</button>
+
+    <button class="key" data-act="digit" data-val="1">1</button>
+    <button class="key" data-act="digit" data-val="2">2</button>
+    <button class="key" data-act="digit" data-val="3">3</button>
+    <button class="key k-op" data-act="op" data-val="+">+</button>
+
+    <button class="key k-wide" data-act="digit" data-val="0">0</button>
+    <button class="key" data-act="decimal">.</button>
+    <button class="key k-eq" data-act="equals">=</button>
+  </div>
+
+  <div class="pad sci" id="padSci" style="display:none;">
+    <button class="key k-sci" data-act="fn" data-val="sin">sin</button>
+    <button class="key k-sci" data-act="fn" data-val="cos">cos</button>
+    <button class="key k-sci" data-act="fn" data-val="tan">tan</button>
+    <button class="key k-fn" data-act="clear">AC</button>
+
+    <button class="key k-sci" data-act="fn" data-val="ln">ln</button>
+    <button class="key k-sci" data-act="fn" data-val="log">log</button>
+    <button class="key k-sci" data-act="fn" data-val="sqrt">&radic;</button>
+    <button class="key k-fn" data-act="back">&#9003;</button>
+
+    <button class="key k-sci" data-act="const" data-val="pi">&pi;</button>
+    <button class="key k-sci" data-act="const" data-val="e">e</button>
+    <button class="key k-op" data-act="op" data-val="^">x&#8318;</button>
+    <button class="key k-op" data-act="op" data-val="&divide;">&divide;</button>
+
+    <button class="key" data-act="digit" data-val="7">7</button>
+    <button class="key" data-act="digit" data-val="8">8</button>
+    <button class="key" data-act="digit" data-val="9">9</button>
+    <button class="key k-op" data-act="op" data-val="&times;">&times;</button>
+
+    <button class="key" data-act="digit" data-val="4">4</button>
+    <button class="key" data-act="digit" data-val="5">5</button>
+    <button class="key" data-act="digit" data-val="6">6</button>
+    <button class="key k-op" data-act="op" data-val="&minus;">&minus;</button>
+
+    <button class="key" data-act="digit" data-val="1">1</button>
+    <button class="key" data-act="digit" data-val="2">2</button>
+    <button class="key" data-act="digit" data-val="3">3</button>
+    <button class="key k-op" data-act="op" data-val="+">+</button>
+
+    <button class="key" data-act="paren" data-val="(">(</button>
+    <button class="key" data-act="digit" data-val="0">0</button>
+    <button class="key" data-act="decimal">.</button>
+    <button class="key k-eq" data-act="equals">=</button>
+  </div>
+
+  <div class="convert-panel" id="padConvert" style="display:none;">
+    <div class="cat-row" id="catRow"></div>
+
+    <div class="conv-card">
+      <label>From</label>
+      <select id="fromSelect"></select>
+      <input type="text" class="conv-value" id="convValueInput" inputmode="decimal" value="1">
+    </div>
+
+    <div class="swap-row">
+      <button class="swap-btn" id="swapBtn" aria-label="Swap units">&#8645;</button>
+    </div>
+
+    <div class="conv-card">
+      <label>To</label>
+      <select id="toSelect"></select>
+    </div>
+
+    <div class="conv-result" id="convResult">
+      <div class="r-unit" id="convResultUnit">&nbsp;</div>
+      <div class="r-value" id="convResultValue">0</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var exprEl = document.getElementById('exprEl');
+  var resultEl = document.getElementById('resultEl');
+  var historyPanel = document.getElementById('historyPanel');
+  var historyList = document.getElementById('historyList');
+  var historyBtn = document.getElementById('historyBtn');
+  var clearHistoryBtn = document.getElementById('clearHistory');
+  var padBasic = document.getElementById('padBasic');
+  var padSci = document.getElementById('padSci');
+  var padConvert = document.getElementById('padConvert');
+  var displayPanel = document.getElementById('displayPanel');
+  var modeBasic = document.getElementById('modeBasic');
+  var modeSci = document.getElementById('modeSci');
+  var modeConvert = document.getElementById('modeConvert');
+  var toastEl = document.getElementById('toastEl');
+  var pasteBtn = document.getElementById('pasteBtn');
+  var pasteOverlay = document.getElementById('pasteOverlay');
+  var pasteInput = document.getElementById('pasteInput');
+
+  var display = '';
+  var justEvaluated = false;
+  var history = [];
+  var currentMode = 'basic';
+
+  var OP_MAP = { '\u00F7':'/', '\u00D7':'*', '\u2212':'-', '+':'+', '^':'**' };
+
+  function loadHistory(){
+    try{
+      var s = localStorage.getItem('calc_history_v1');
+      history = s ? JSON.parse(s) : [];
+    }catch(e){ history = []; }
+    renderHistory();
+  }
+  function saveHistory(){
+    try{ localStorage.setItem('calc_history_v1', JSON.stringify(history.slice(-30))); }catch(e){}
+  }
+
+  function fmtNum(n){
+    if (!isFinite(n)) return 'Error';
+    if (Math.abs(n) < 1e-10) n = 0;
+    var s = Number(n.toPrecision(12)).toString();
+    if (s.length > 14) s = n.toExponential(6);
+    return s;
+  }
+
+  function updateDisplay(){
+    exprEl.textContent = display || '\u00A0';
+    var out = display.length ? previewResult() : '0';
+    resultEl.textContent = out;
+    resultEl.classList.toggle('small', out.length > 9);
+  }
+
+  function previewResult(){
+    var val = evaluate(rawify(display));
+    if (val === null) return display.slice(-1) === '' ? '0' : '';
+    return fmtNum(val);
+  }
+
+  function rawify(disp){
+    var s = disp;
+    Object.keys(OP_MAP).forEach(function(k){ s = s.split(k).join(OP_MAP[k]); });
+    return s;
+  }
+
+  function evaluate(expr){
+    if (!expr) return null;
+    try{
+      var cleaned = expr
+        .replace(/(\d(\.\d+)?)%/g, '($1/100)')
+        .replace(/\u03C0/g, 'Math.PI')
+        .replace(/\be\b/g, 'Math.E')
+        .replace(/sqrt\(/g, 'Math.sqrt(')
+        .replace(/sin\(/g, 'Math.sin(')
+        .replace(/cos\(/g, 'Math.cos(')
+        .replace(/tan\(/g, 'Math.tan(')
+        .replace(/ln\(/g, 'Math.log(')
+        .replace(/log\(/g, 'Math.log10(');
+      var openCount = (cleaned.match(/\(/g)||[]).length;
+      var closeCount = (cleaned.match(/\)/g)||[]).length;
+      for (var i=0;i<openCount-closeCount;i++) cleaned += ')';
+      var val = Function('"use strict"; return (' + cleaned + ')')();
+      if (typeof val !== 'number' || isNaN(val)) return null;
+      return val;
+    }catch(e){ return null; }
+  }
+
+  function append(token){
+    if (justEvaluated){
+      var startFresh = /^[0-9.(]/.test(token) || token === '\u03C0' || token === 'e';
+      if (startFresh) { display = ''; }
+      justEvaluated = false;
+    }
+    display += token;
+    updateDisplay();
+  }
+
+  function handleDigit(d){ append(d); }
+
+  function handleOp(sym){
+    if (!display.length) { if (sym === '\u2212') { append(sym); } return; }
+    var last = display.slice(-1);
+    if ('\u00F7\u00D7\u2212+^'.includes(last)) {
+      display = display.slice(0, -1) + sym;
+      updateDisplay();
+      return;
+    }
+    append(sym);
+  }
+
+  function handleDecimal(){
+    var parts = display.split(/[\u00F7\u00D7\u2212+^(]/);
+    var current = parts[parts.length-1];
+    if (current.includes('.')) return;
+    append(current.length === 0 ? '0.' : '.');
+  }
+
+  function handleFn(name){ append(name + '('); }
+  function handleConst(name){ append(name === 'pi' ? '\u03C0' : 'e'); }
+
+  function handleParen(){
+    var opens = (display.match(/\(/g)||[]).length;
+    var closes = (display.match(/\)/g)||[]).length;
+    var last = display.slice(-1);
+    if (opens > closes && /[0-9)]/.test(last)) { append(')'); } else { append('('); }
+  }
+
+  function handleSign(){
+    var val = evaluate(rawify(display));
+    if (val === null || display === '') return;
+    val = val * -1;
+    display = fmtNum(val);
+    updateDisplay();
+  }
+
+  function handlePercent(){
+    if (!display.length) return;
+    var last = display.slice(-1);
+    if (!/[0-9]/.test(last)) return;
+    display += '%';
+    updateDisplay();
+  }
+
+  function handleBack(){
+    if (justEvaluated){ handleClear(); return; }
+    display = display.slice(0, -1);
+    updateDisplay();
+  }
+
+  function handleClear(){
+    display = '';
+    justEvaluated = false;
+    updateDisplay();
+  }
+
+  function handleEquals(){
+    if (!display.length) return;
+    var expr = rawify(display);
+    var val = evaluate(expr);
+    if (val === null) { resultEl.textContent = 'Error'; return; }
+    history.push({ expr: display, result: fmtNum(val) });
+    saveHistory();
+    renderHistory();
+    exprEl.textContent = display + ' =';
+    display = fmtNum(val);
+    resultEl.textContent = display;
+    resultEl.classList.toggle('small', display.length > 9);
+    justEvaluated = true;
+  }
+
+  function renderHistory(){
+    if (!history.length){
+      historyList.innerHTML = '<div class="history-empty">No calculations yet</div>';
+      return;
+    }
+    historyList.innerHTML = history.slice(-30).map(function(h){
+      return '<div class="history-item" data-res="'+encodeURIComponent(h.result)+'">' +
+        '<div class="h-expr">'+h.expr+' =</div><div class="h-res">'+h.result+'</div></div>';
+    }).join('');
+  }
+
+  historyList.addEventListener('click', function(e){
+    var item = e.target.closest('.history-item');
+    if (!item) return;
+    display = decodeURIComponent(item.getAttribute('data-res'));
+    justEvaluated = true;
+    updateDisplay();
+    historyPanel.classList.remove('open');
+  });
+  clearHistoryBtn.addEventListener('click', function(){
+    history = []; saveHistory(); renderHistory();
+  });
+  historyBtn.addEventListener('click', function(){ historyPanel.classList.toggle('open'); });
+
+  function bindPad(pad){
+    pad.addEventListener('click', function(e){
+      var btn = e.target.closest('button.key');
+      if (!btn) return;
+      var act = btn.getAttribute('data-act');
+      var val = btn.getAttribute('data-val');
+      switch(act){
+        case 'digit': handleDigit(val); break;
+        case 'op': handleOp(val); break;
+        case 'decimal': handleDecimal(); break;
+        case 'fn': handleFn(val); break;
+        case 'const': handleConst(val); break;
+        case 'paren': handleParen(); break;
+        case 'sign': handleSign(); break;
+        case 'percent': handlePercent(); break;
+        case 'back': handleBack(); break;
+        case 'clear': handleClear(); break;
+        case 'equals': handleEquals(); break;
+      }
+    });
+  }
+  bindPad(padBasic);
+  bindPad(padSci);
+
+  function setMode(mode){
+    currentMode = mode;
+    modeBasic.classList.toggle('active', mode==='basic');
+    modeSci.classList.toggle('active', mode==='sci');
+    modeConvert.classList.toggle('active', mode==='convert');
+    padBasic.style.display = mode==='basic' ? 'grid' : 'none';
+    padSci.style.display = mode==='sci' ? 'grid' : 'none';
+    padConvert.style.display = mode==='convert' ? 'flex' : 'none';
+    displayPanel.style.display = mode==='convert' ? 'none' : 'flex';
+  }
+  modeBasic.addEventListener('click', function(){ setMode('basic'); });
+  modeSci.addEventListener('click', function(){ setMode('sci'); });
+  modeConvert.addEventListener('click', function(){ setMode('convert'); });
+
+  document.addEventListener('keydown', function(e){
+    if (currentMode === 'convert') return;
+    var k = e.key;
+    if (/^[0-9]$/.test(k)) { handleDigit(k); return; }
+    if (k === '.') { handleDecimal(); return; }
+    if (k === '+') { handleOp('+'); return; }
+    if (k === '-') { handleOp('\u2212'); return; }
+    if (k === '*') { handleOp('\u00D7'); return; }
+    if (k === '/') { e.preventDefault(); handleOp('\u00F7'); return; }
+    if (k === '^') { handleOp('^'); return; }
+    if (k === '(' || k === ')') { handleParen(); return; }
+    if (k === '%') { handlePercent(); return; }
+    if (k === 'Enter' || k === '=') { e.preventDefault(); handleEquals(); return; }
+    if (k === 'Backspace') { handleBack(); return; }
+    if (k === 'Escape') { handleClear(); return; }
+  });
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function(){ toastEl.classList.remove('show'); }, 1200);
+  }
+
+  function copyText(text){
+    function done(){ showToast('Copied'); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallbackCopy);
+    } else { fallbackCopy(); }
+    function fallbackCopy(){
+      try{
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed'; ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        done();
+      }catch(e){}
+    }
+  }
+
+  function bindLongPressCopy(el, getText){
+    var timer;
+    function start(){ timer = setTimeout(function(){ copyText(getText()); }, 480); }
+    function cancel(){ clearTimeout(timer); }
+    el.addEventListener('touchstart', start, {passive:true});
+    el.addEventListener('touchend', cancel);
+    el.addEventListener('touchmove', cancel);
+    el.addEventListener('mousedown', start);
+    el.addEventListener('mouseup', cancel);
+    el.addEventListener('mouseleave', cancel);
+  }
+  bindLongPressCopy(resultEl, function(){ return resultEl.textContent; });
+
+  var pasteTarget = 'calc';
+  pasteBtn.addEventListener('click', function(){
+    pasteTarget = currentMode === 'convert' ? 'convert' : 'calc';
+    pasteOverlay.classList.add('open');
+    pasteInput.value = '';
+    pasteInput.focus();
+  });
+  pasteInput.addEventListener('input', function(){
+    var v = pasteInput.value.trim();
+    var num = parseFloat(v.replace(/,/g,''));
+    if (!isNaN(num)) {
+      if (pasteTarget === 'convert') {
+        convValueInput.value = num.toString();
+        updateConversion();
+      } else {
+        if (justEvaluated) { display = ''; justEvaluated = false; }
+        display += num.toString();
+        updateDisplay();
+      }
+      pasteOverlay.classList.remove('open');
+      pasteInput.blur();
+      showToast('Pasted');
+    }
+  });
+  pasteInput.addEventListener('blur', function(){
+    setTimeout(function(){ pasteOverlay.classList.remove('open'); }, 150);
+  });
+
+  var CATEGORIES = {
+    length: { label:'Length', units:[
+      {key:'mm', label:'Millimeters', abbr:'mm', factor:0.001},
+      {key:'cm', label:'Centimeters', abbr:'cm', factor:0.01},
+      {key:'m', label:'Meters', abbr:'m', factor:1},
+      {key:'km', label:'Kilometers', abbr:'km', factor:1000},
+      {key:'in', label:'Inches', abbr:'in', factor:0.0254},
+      {key:'ft', label:'Feet', abbr:'ft', factor:0.3048},
+      {key:'yd', label:'Yards', abbr:'yd', factor:0.9144},
+      {key:'mi', label:'Miles', abbr:'mi', factor:1609.344}
+    ], defaultFrom:'km', defaultTo:'mi' },
+    weight: { label:'Weight', units:[
+      {key:'mg', label:'Milligrams', abbr:'mg', factor:0.000001},
+      {key:'g', label:'Grams', abbr:'g', factor:0.001},
+      {key:'kg', label:'Kilograms', abbr:'kg', factor:1},
+      {key:'oz', label:'Ounces', abbr:'oz', factor:0.0283495},
+      {key:'lb', label:'Pounds', abbr:'lb', factor:0.453592},
+      {key:'st', label:'Stone', abbr:'st', factor:6.35029},
+      {key:'t', label:'Tonnes', abbr:'t', factor:1000}
+    ], defaultFrom:'kg', defaultTo:'lb' },
+    temp: { label:'Temperature', units:[
+      {key:'c', label:'Celsius', abbr:'\u00B0C'},
+      {key:'f', label:'Fahrenheit', abbr:'\u00B0F'},
+      {key:'k', label:'Kelvin', abbr:'K'}
+    ], defaultFrom:'c', defaultTo:'f' },
+    volume: { label:'Volume', units:[
+      {key:'ml', label:'Milliliters', abbr:'mL', factor:0.001},
+      {key:'l', label:'Liters', abbr:'L', factor:1},
+      {key:'m3', label:'Cubic meters', abbr:'m\u00B3', factor:1000},
+      {key:'tsp', label:'Teaspoons', abbr:'tsp', factor:0.00492892},
+      {key:'tbsp', label:'Tablespoons', abbr:'tbsp', factor:0.0147868},
+      {key:'floz', label:'Fluid ounces', abbr:'fl oz', factor:0.0295735},
+      {key:'cup', label:'Cups', abbr:'cup', factor:0.24},
+      {key:'pt', label:'Pints', abbr:'pt', factor:0.473176},
+      {key:'qt', label:'Quarts', abbr:'qt', factor:0.946353},
+      {key:'gal', label:'Gallons', abbr:'gal', factor:3.78541}
+    ], defaultFrom:'l', defaultTo:'gal' },
+    area: { label:'Area', units:[
+      {key:'m2', label:'Square meters', abbr:'m\u00B2', factor:1},
+      {key:'km2', label:'Square kilometers', abbr:'km\u00B2', factor:1000000},
+      {key:'ft2', label:'Square feet', abbr:'ft\u00B2', factor:0.092903},
+      {key:'yd2', label:'Square yards', abbr:'yd\u00B2', factor:0.836127},
+      {key:'acre', label:'Acres', abbr:'ac', factor:4046.86},
+      {key:'ha', label:'Hectares', abbr:'ha', factor:10000},
+      {key:'mi2', label:'Square miles', abbr:'mi\u00B2', factor:2589988.11}
+    ], defaultFrom:'m2', defaultTo:'ft2' }
+  };
+  var CAT_ORDER = ['length','weight','temp','volume','area'];
+  var currentCat = 'length', currentFromUnit, currentToUnit;
+
+  var catRow = document.getElementById('catRow');
+  var fromSelect = document.getElementById('fromSelect');
+  var toSelect = document.getElementById('toSelect');
+  var convValueInput = document.getElementById('convValueInput');
+  var swapBtn = document.getElementById('swapBtn');
+  var convResultValue = document.getElementById('convResultValue');
+  var convResultUnit = document.getElementById('convResultUnit');
+
+  function buildCatChips(){
+    catRow.innerHTML = CAT_ORDER.map(function(key){
+      var c = CATEGORIES[key];
+      return '<button class="cat-chip'+(key===currentCat?' active':'')+'" data-cat="'+key+'">'+c.label+'</button>';
+    }).join('');
+  }
+  catRow.addEventListener('click', function(e){
+    var chip = e.target.closest('.cat-chip');
+    if (!chip) return;
+    currentCat = chip.getAttribute('data-cat');
+    buildCatChips();
+    populateSelects();
+    updateConversion();
+  });
+
+  function populateSelects(){
+    var cat = CATEGORIES[currentCat];
+    var opts = cat.units.map(function(u){ return '<option value="'+u.key+'">'+u.label+'</option>'; }).join('');
+    fromSelect.innerHTML = opts;
+    toSelect.innerHTML = opts;
+    fromSelect.value = currentFromUnit = cat.defaultFrom;
+    toSelect.value = currentToUnit = cat.defaultTo;
+  }
+  fromSelect.addEventListener('change', function(){ currentFromUnit = fromSelect.value; updateConversion(); });
+  toSelect.addEventListener('change', function(){ currentToUnit = toSelect.value; updateConversion(); });
+  convValueInput.addEventListener('input', updateConversion);
+  swapBtn.addEventListener('click', function(){
+    var tmp = currentFromUnit; currentFromUnit = currentToUnit; currentToUnit = tmp;
+    fromSelect.value = currentFromUnit; toSelect.value = currentToUnit;
+    updateConversion();
+  });
+
+  function unitAbbr(catKey, unitKey){
+    var u = CATEGORIES[catKey].units.filter(function(x){ return x.key===unitKey; })[0];
+    return u ? u.abbr : '';
+  }
+  function convertTemp(v, from, to){
+    var c;
+    if (from==='c') c=v; else if (from==='f') c=(v-32)*5/9; else c=v-273.15;
+    if (to==='c') return c;
+    if (to==='f') return c*9/5+32;
+    return c+273.15;
+  }
+  function convertVal(value, fromKey, toKey, catKey){
+    if (catKey === 'temp') return convertTemp(value, fromKey, toKey);
+    var cat = CATEGORIES[catKey];
+    var fromU = cat.units.filter(function(u){ return u.key===fromKey; })[0];
+    var toU = cat.units.filter(function(u){ return u.key===toKey; })[0];
+    return (value * fromU.factor) / toU.factor;
+  }
+  function updateConversion(){
+    var val = parseFloat(convValueInput.value);
+    if (isNaN(val)) { convResultValue.textContent = '0'; convResultUnit.textContent = unitAbbr(currentCat, currentToUnit); return; }
+    var result = convertVal(val, currentFromUnit, currentToUnit, currentCat);
+    convResultValue.textContent = fmtNum(result);
+    convResultUnit.textContent = unitAbbr(currentCat, currentToUnit);
+  }
+  bindLongPressCopy(convResultValue, function(){ return convResultValue.textContent; });
+
+  buildCatChips();
+  populateSelects();
+  updateConversion();
+
+  loadHistory();
+  updateDisplay();
+})();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./service-worker.js").catch(function (error) {
+      console.log("Service worker registration failed:", error);
+    });
+  });
+}
+</script>
+</body>
+</html>
