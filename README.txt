@@ -1,20 +1,14 @@
-LifeCalc V2
+LifeCalc V3
 
 Changes:
-- iPhone calculator-style thumb-friendly layout
-- Larger result and expression text
-- Larger calculator buttons
-- Light / dark theme toggle
-- Double-tap and gesture zoom blocked
-- Better iPhone safe-area placement
-- History panel still available
-- Scientific and Convert modes retained
-- Service worker cache bumped to V2
+- Keypad moved lower for easier one-handed use
+- Button area made closer to iPhone Calculator proportions
+- Result remains large but sits more naturally above keypad
+- Top controls tightened slightly
+- Light/dark mode retained
+- Zoom lock retained
+- Scientific, Convert and History retained
+- Service worker cache bumped to V3
 
-To update your existing GitHub Pages app:
-1. Replace the old files in your LifeCalc GitHub folder with these V2 files.
-2. Commit in GitHub Desktop.
-3. Push to origin.
-4. Wait around 1 minute.
-5. On iPhone, fully close LifeCalc and reopen it.
-If the old version remains cached, remove LifeCalc from the Home Screen once and add it again from Safari.
+Update:
+Replace the files in your existing LifeCalc GitHub folder, commit, then push.
