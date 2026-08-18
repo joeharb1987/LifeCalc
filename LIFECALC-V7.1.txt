@@ -1,0 +1,13 @@
+LifeCalc V7.1 Budget Planner
+
+Actual changes:
+- Income entry
+- Bill entry
+- Budget item list
+- Local saving
+
+Next:
+- Custom categories
+- Recurring bills
+- Edit/delete
+- Charts

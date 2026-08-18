@@ -613,6 +613,92 @@ button.key:active{
  border:1px solid var(--key-border);
  margin-bottom:8px;
 }
+
+<style>
+.life-money-nav{
+display:flex;
+gap:8px;
+margin-top:10px;
+}
+.life-money-nav button{
+flex:1;
+height:44px;
+border-radius:18px;
+border:1px solid var(--key-border);
+background:var(--top-btn);
+color:var(--text);
+font-weight:700;
+}
+.life-money-nav button.active{
+background:var(--panel);
+color:var(--text-on-navy);
+}
+.life-money-page{
+display:none;
+flex-direction:column;
+gap:12px;
+padding:12px 0;
+overflow:auto;
+}
+.life-money-page.show{display:flex}
+.money-summary-card{
+background:var(--panel);
+color:var(--text-on-navy);
+border-radius:24px;
+padding:18px;
+font-size:14px;
+}
+.money-summary-card strong{
+display:block;
+font-size:38px;
+margin-top:8px;
+}
+.money-action{
+height:52px;
+border:0;
+border-radius:18px;
+background:var(--amber);
+color:white;
+font-weight:800;
+font-size:17px;
+}
+.money-list-card{
+background:var(--top-btn);
+border:1px solid var(--key-border);
+border-radius:20px;
+padding:16px;
+}
+
+<style>
+.v71-card{
+ background:var(--top-btn);
+ border:1px solid var(--key-border);
+ border-radius:20px;
+ padding:16px;
+ margin-top:10px;
+}
+.v71-grid{
+ display:grid;
+ grid-template-columns:repeat(2,1fr);
+ gap:10px;
+}
+.v71-btn{
+ width:100%;
+ height:50px;
+ border:0;
+ border-radius:18px;
+ background:var(--amber);
+ color:white;
+ font-weight:800;
+}
+.v71-row{
+ display:flex;
+ justify-content:space-between;
+ padding:10px 0;
+ border-bottom:1px solid var(--key-border);
+}
+</style>
+</style>
 </style>
 </style>
 </style>
@@ -1770,6 +1856,105 @@ if(b){
 // - margins
 // - wages
 // - break-even
+</script>
+
+<div class="life-money-page" id="v7MoneyPage">
+<div class="money-summary-card">
+ Available This Month
+ <strong id="v7Balance">$0</strong>
+</div>
+
+<div class="money-list-card">
+<label>Quick Add Expense</label>
+<input id="v7ExpenseName" placeholder="Groceries" style="width:100%;font-size:20px;margin-top:10px;">
+<input id="v7ExpenseAmount" placeholder="50" inputmode="decimal" style="width:100%;font-size:28px;margin-top:10px;">
+</div>
+
+<button class="money-action" id="v7AddExpense">Add Expense</button>
+
+<div class="money-list-card" id="v7Transactions">
+No expenses yet
+</div>
+</div>
+
+<script>
+(function(){
+const page=document.getElementById('v7MoneyPage');
+const add=document.getElementById('v7AddExpense');
+const list=document.getElementById('v7Transactions');
+const balance=document.getElementById('v7Balance');
+if(!add) return;
+
+let items=JSON.parse(localStorage.getItem('life_v7_money')||'[]');
+
+function render(){
+ let total=0;
+ list.innerHTML='';
+ items.forEach(i=>{
+  total+=i.amount;
+  list.innerHTML += '<div style="padding:10px 0;border-bottom:1px solid var(--key-border)">'+i.name+' <b>$'+i.amount+'</b></div>';
+ });
+ balance.textContent='$'+(total*-1).toFixed(0);
+ if(!items.length) list.textContent='No expenses yet';
+}
+add.onclick=function(){
+ let name=document.getElementById('v7ExpenseName').value||'Expense';
+ let amount=parseFloat(document.getElementById('v7ExpenseAmount').value);
+ if(!isNaN(amount)){
+  items.push({name:name,amount:amount});
+  localStorage.setItem('life_v7_money',JSON.stringify(items));
+  render();
+ }
+};
+render();
+})();
+</script>
+
+<div class="v71-card" id="v71Planner">
+<h3>Budget Planner</h3>
+
+<div class="v71-grid">
+<button class="v71-btn" id="v71IncomeBtn">+ Income</button>
+<button class="v71-btn" id="v71BillBtn">+ Bill</button>
+</div>
+
+<div class="v71-card">
+<input id="v71Name" placeholder="Item name" style="width:100%;font-size:20px;">
+<input id="v71Amount" placeholder="Amount" inputmode="decimal" style="width:100%;font-size:26px;margin-top:10px;">
+</div>
+
+<div id="v71List"></div>
+</div>
+
+<script>
+(function(){
+const list=document.getElementById('v71List');
+const add=document.getElementById('v71IncomeBtn');
+const bill=document.getElementById('v71BillBtn');
+if(!list) return;
+
+let data=JSON.parse(localStorage.getItem('life_v71_budget')||'[]');
+
+function render(){
+ list.innerHTML='';
+ data.forEach(x=>{
+  list.innerHTML += '<div class="v71-row"><span>'+x.name+'</span><b>$'+x.amount+' '+(x.type==='income'?'+':'-')+'</b></div>';
+ });
+}
+
+function addItem(type){
+ let name=document.getElementById('v71Name').value||'Item';
+ let amount=parseFloat(document.getElementById('v71Amount').value);
+ if(!isNaN(amount)){
+  data.push({name,amount,type});
+  localStorage.setItem('life_v71_budget',JSON.stringify(data));
+  render();
+ }
+}
+add.onclick=()=>addItem('income');
+bill.onclick=()=>addItem('bill');
+render();
+})();
 </script>
 </body>
 

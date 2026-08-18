@@ -1,0 +1,14 @@
+LifeCalc V7 Money App
+
+ACTUAL CHANGES:
+- Added visible Money module
+- Added quick expense entry
+- Added saved expense list
+- Added monthly money summary card
+- Uses iPhone local storage
+
+Next:
+- Custom categories
+- Income tracking
+- Bills
+- Finance calculators
