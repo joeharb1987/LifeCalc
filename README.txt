@@ -1,18 +1,20 @@
-CALC — iPhone PWA
+LifeCalc V2
 
-Files included:
-- index.html
-- manifest.json
-- service-worker.js
-- icons/apple-touch-icon.png
-- icons/icon-192.png
-- icons/icon-512.png
+Changes:
+- iPhone calculator-style thumb-friendly layout
+- Larger result and expression text
+- Larger calculator buttons
+- Light / dark theme toggle
+- Double-tap and gesture zoom blocked
+- Better iPhone safe-area placement
+- History panel still available
+- Scientific and Convert modes retained
+- Service worker cache bumped to V2
 
-To install on iPhone:
-1. Upload this whole folder to an HTTPS web host.
-2. Open the site in Safari on iPhone.
-3. Tap Share.
-4. Tap Add to Home Screen.
-5. Tap Add.
-
-The app will launch standalone and cache itself for offline use after the first successful load.
+To update your existing GitHub Pages app:
+1. Replace the old files in your LifeCalc GitHub folder with these V2 files.
+2. Commit in GitHub Desktop.
+3. Push to origin.
+4. Wait around 1 minute.
+5. On iPhone, fully close LifeCalc and reopen it.
+If the old version remains cached, remove LifeCalc from the Home Screen once and add it again from Safari.
