@@ -627,11 +627,40 @@ z-index:9999;
 <body>
 <div class="app">
   
-<div class="lc-nav">
-<button data-lc="calc">🧮 Calc</button>
-<button data-lc="money">💰 Money</button>
-<button data-lc="finance">🏦 Finance</button>
+
+<div class="life-tabs">
+<button class="active" data-page="calc">🧮<span>Calc</span></button>
+<button data-page="money">💰<span>Money</span></button>
+<button data-page="finance">🏦<span>Finance</span></button>
+<button data-page="wealth">📈<span>Wealth</span></button>
 </div>
+
+<div class="life-page" id="moneyPage">
+<div class="lc-card">
+<h2>💰 Budget</h2>
+<p>Income, expenses and custom categories.</p>
+<input class="lc-input" placeholder="Add income">
+<input class="lc-input" placeholder="Add expense">
+</div>
+</div>
+
+<div class="life-page" id="financePage">
+<div class="lc-card">
+<h2>🏦 Repayments</h2>
+<p>Loans, mortgage and extra repayments.</p>
+<input class="lc-input" placeholder="Loan amount">
+<input class="lc-input" placeholder="Interest rate">
+<input class="lc-input" placeholder="Years">
+</div>
+</div>
+
+<div class="life-page" id="wealthPage">
+<div class="lc-card">
+<h2>📈 Wealth</h2>
+<p>Assets, liabilities and net worth.</p>
+</div>
+</div>
+
 <div class="topbar">
     <button class="history-btn" id="historyBtn" aria-label="History">&#8635;</button>
     <div class="mode-toggle">
@@ -1795,6 +1824,20 @@ document.querySelectorAll('.v11-tabs button').forEach(b=>{
  document.querySelectorAll('.v11-page').forEach(x=>x.classList.remove('active'));
  b.classList.add('active');
  document.getElementById(b.dataset.v11).classList.add('active');
+ }
+});
+</script>
+
+<script>
+document.querySelectorAll('.life-tabs button').forEach(btn=>{
+ btn.onclick=()=>{
+   document.querySelectorAll('.life-tabs button').forEach(b=>b.classList.remove('active'));
+   btn.classList.add('active');
+   document.querySelectorAll('.life-page').forEach(p=>p.classList.remove('show'));
+   const page=btn.dataset.page;
+   if(page!=='calc'){
+     document.getElementById(page+'Page').classList.add('show');
+   }
  }
 });
 </script>
