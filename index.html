@@ -554,6 +554,32 @@ button.key:active{
  border-radius:14px;border:1px solid var(--key-border);
  background:transparent;color:var(--text);
 }
+
+<style>
+.v8-bottom-nav{
+position:fixed;
+bottom:env(safe-area-inset-bottom);
+left:14px;
+right:14px;
+height:70px;
+background:var(--panel);
+border-radius:28px;
+display:flex;
+align-items:center;
+justify-content:space-around;
+z-index:50;
+}
+.v8-bottom-nav button{
+background:none;
+border:0;
+color:#9AA1C4;
+font-size:12px;
+font-weight:700;
+}
+.v8-bottom-nav button.active{color:var(--amber)}
+.v8-page{display:none}
+.v8-page.active{display:block}
+</style>
 </style>
 </style>
 </style>
@@ -1648,6 +1674,17 @@ if(calc) calc.onclick=()=>{
  document.getElementById('loanResult').innerHTML='Monthly: $'+m.toFixed(2);
 };
 })();
+</script>
+
+<script>
+document.querySelectorAll('.v8-bottom-nav button').forEach(btn=>{
+ btn.onclick=()=>{
+  document.querySelectorAll('.v8-page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.v8-bottom-nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById(btn.dataset.page).classList.add('active');
+  btn.classList.add('active');
+ };
+});
 </script>
 </body>
 
