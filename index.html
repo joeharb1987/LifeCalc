@@ -473,6 +473,64 @@
     color:#FF9500!important;
   }
 
+
+<style>
+.money-panel{display:none;flex:1;flex-direction:column;gap:12px;padding-top:15px}
+.money-panel.show{display:flex}
+.money-card{background:var(--top-btn);border:1px solid var(--key-border);border-radius:22px;padding:16px}
+.money-card label{display:block;color:var(--text-dim);font-size:12px;font-weight:700}
+.money-card input{width:100%;border:0;background:transparent;color:var(--text);font-size:34px;margin-top:8px}
+.money-result{background:var(--panel);color:var(--text-on-navy);border-radius:24px;padding:20px;font-size:32px}
+.money-btn{height:52px;border:0;border-radius:20px;background:var(--amber);color:white;font-weight:700;font-size:18px}
+
+<style>
+.money-categories{
+display:grid;
+grid-template-columns:repeat(2,1fr);
+gap:10px;
+}
+.money-category{
+background:var(--top-btn);
+border:1px solid var(--key-border);
+border-radius:18px;
+padding:14px;
+color:var(--text);
+font-weight:700;
+}
+.money-summary{
+display:flex;
+gap:10px;
+}
+.money-small{
+flex:1;
+background:var(--panel);
+color:var(--text-on-navy);
+border-radius:18px;
+padding:14px;
+font-size:14px;
+}
+.money-small strong{
+display:block;
+font-size:24px;
+margin-top:6px;
+}
+
+<style>
+/* V6.2 performance polish */
+button.key{
+  transition:transform .02s ease, filter .02s ease;
+  will-change:transform;
+}
+button.key:active{
+  transform:scale(.96);
+}
+.result,.expr{
+  contain:layout paint;
+}
+</style>
+</style>
+</style>
+
 </style>
 </head>
 <body>
@@ -1452,5 +1510,50 @@ if ("serviceWorker" in navigator) {
 // Finance: Repayments, Loans, Net Worth
 // Business: GST, Margin, Wage, Break-even
 </script>
+
+<script id="LifeCalc-V6-Money-Module">
+// LifeCalc V6 Money Module
+// Budget, income, expenses, weekly tracking and saved money dashboard
+// Added as the next app expansion layer.
+</script>
+
+<script>
+(function(){
+const i=document.getElementById('moneyIncome');
+const e=document.getElementById('moneyExpenses');
+const r=document.getElementById('moneyResult');
+const b=document.getElementById('moneyCalculate');
+if(b){
+ b.onclick=function(){
+  const result=(parseFloat(i.value)||0)-(parseFloat(e.value)||0);
+  r.textContent='$'+result.toLocaleString()+' available';
+  localStorage.setItem('life_money',JSON.stringify({income:i.value,expenses:e.value}));
+ };
+}
+})();
+</script>
+
+<script>
+(function(){
+  // V6.2 fast touch response
+  document.querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('touchstart', function(){
+      btn.style.transform='scale(.96)';
+    }, {passive:true});
+    btn.addEventListener('touchend', function(){
+      btn.style.transform='';
+    }, {passive:true});
+  });
+
+  // Avoid iOS delayed click behaviour on calculator keys.
+  document.querySelectorAll('button.key').forEach(function(btn){
+    btn.addEventListener('touchend', function(e){
+      e.preventDefault();
+      btn.click();
+    }, {passive:false});
+  });
+})();
+</script>
 </body>
+
 </html>

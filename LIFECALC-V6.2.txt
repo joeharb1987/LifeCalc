@@ -1,0 +1,11 @@
+LifeCalc V6.2 Performance Update
+
+Changes:
+- Faster calculator button response
+- Reduced visual lag
+- Improved touch feedback
+- iPhone tap handling improvements
+- Cache bumped for update delivery
+
+Next:
+V6.3 Budget transactions

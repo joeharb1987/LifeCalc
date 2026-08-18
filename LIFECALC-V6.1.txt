@@ -1,0 +1,11 @@
+LifeCalc V6.1 Money Dashboard
+
+Added:
+- Expense category cards
+- Income summary
+- Remaining money summary
+- Foundation for category budgets
+
+Next:
+V6.2 transaction entry
+V7 finance calculators

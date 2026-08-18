@@ -1,0 +1,11 @@
+LifeCalc V6
+
+Build target:
+- Money tab
+- Weekly income tracker
+- Expense categories
+- Remaining money calculation
+- Local iPhone storage
+
+Design:
+Keep existing LifeCalc cream/navy/gold styling.
