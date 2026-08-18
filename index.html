@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">
-<title>Calc</title>
+<title>LifeCalc Ultimate</title>
 <style>
   :root{
     --bg:#F5F1E7;
@@ -155,11 +155,11 @@
   }
 
   .expr{
-    min-height:32px;
+    min-height:28px;
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;
     color:var(--text-dim);
     text-align:right;
-    font-size:26px;
+    font-size:21px;
     font-weight:400;
     white-space:nowrap;
     overflow-x:auto;
@@ -174,7 +174,7 @@
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;
     color:var(--text);
     text-align:right;
-    font-size:68px;
+    font-size:66px;
     font-weight:300;
     line-height:1;
     letter-spacing:-.045em;
@@ -186,8 +186,8 @@
   }
   body.dark .result{ color:#fff; }
   .result::-webkit-scrollbar{display:none;}
-  .result.small{font-size:54px;}
-  .result.tiny{font-size:42px;}
+  .result.small{font-size:48px;}
+  .result.tiny{font-size:35px;}
 
   .history-panel{
     position:absolute;
@@ -463,6 +463,16 @@
     .pad.basic{height:500px;}
   }
 
+
+  button.key.operator-active{
+    background:var(--text-on-navy)!important;
+    color:var(--panel)!important;
+  }
+  body.dark button.key.operator-active{
+    background:#FFFFFF!important;
+    color:#FF9500!important;
+  }
+
 </style>
 </head>
 <body>
@@ -601,42 +611,40 @@
   var pasteInput = document.getElementById('pasteInput');
 
   var display = '';
+  var completedExpr = '';
   var justEvaluated = false;
   var history = [];
   var currentMode = 'basic';
+  var repeatOp = null;
+  var repeatOperand = null;
 
   var OP_MAP = { '\u00F7':'/', '\u00D7':'*', '\u2212':'-', '+':'+', '^':'**' };
+  var OPERATORS = '\u00F7\u00D7\u2212+^';
 
   function loadHistory(){
     try{
-      var s = localStorage.getItem('calc_history_v1');
+      var s = localStorage.getItem('calc_history_v4');
+      if (!s) s = localStorage.getItem('calc_history_v1');
       history = s ? JSON.parse(s) : [];
     }catch(e){ history = []; }
     renderHistory();
   }
+
   function saveHistory(){
-    try{ localStorage.setItem('calc_history_v1', JSON.stringify(history.slice(-30))); }catch(e){}
+    try{ localStorage.setItem('calc_history_v4', JSON.stringify(history.slice(-30))); }catch(e){}
   }
 
   function fmtNum(n){
     if (!isFinite(n)) return 'Error';
-    if (Math.abs(n) < 1e-10) n = 0;
-    var s = Number(n.toPrecision(12)).toString();
-    if (s.length > 14) s = n.toExponential(6);
+    if (Math.abs(n) < 1e-12) n = 0;
+    var abs = Math.abs(n);
+    var s;
+    if ((abs >= 1e12) || (abs > 0 && abs < 1e-9)) {
+      s = n.toExponential(8).replace(/\.?0+e/, 'e');
+    } else {
+      s = Number(n.toPrecision(12)).toString();
+    }
     return s;
-  }
-
-  function updateDisplay(){
-    exprEl.textContent = display || '\u00A0';
-    var out = display.length ? previewResult() : '0';
-    resultEl.textContent = out;
-    resultEl.classList.toggle('small', out.length > 8); resultEl.classList.toggle('tiny', out.length > 12);
-  }
-
-  function previewResult(){
-    var val = evaluate(rawify(display));
-    if (val === null) return display.slice(-1) === '' ? '0' : '';
-    return fmtNum(val);
   }
 
   function rawify(disp){
@@ -649,7 +657,6 @@
     if (!expr) return null;
     try{
       var cleaned = expr
-        .replace(/(\d(\.\d+)?)%/g, '($1/100)')
         .replace(/\u03C0/g, 'Math.PI')
         .replace(/\be\b/g, 'Math.E')
         .replace(/sqrt\(/g, 'Math.sqrt(')
@@ -658,110 +665,377 @@
         .replace(/tan\(/g, 'Math.tan(')
         .replace(/ln\(/g, 'Math.log(')
         .replace(/log\(/g, 'Math.log10(');
+
+      // Do not auto-evaluate if the expression visibly ends with an operator.
+      if (/[+\-*/]$/.test(cleaned) || cleaned.endsWith('**')) return null;
+
       var openCount = (cleaned.match(/\(/g)||[]).length;
       var closeCount = (cleaned.match(/\)/g)||[]).length;
       for (var i=0;i<openCount-closeCount;i++) cleaned += ')';
+
       var val = Function('"use strict"; return (' + cleaned + ')')();
-      if (typeof val !== 'number' || isNaN(val)) return null;
+      if (typeof val !== 'number' || isNaN(val) || !isFinite(val)) return null;
       return val;
     }catch(e){ return null; }
   }
 
+  function setResultText(text){
+    text = (text === null || text === undefined || text === '') ? '0' : String(text);
+    resultEl.textContent = text;
+    resultEl.classList.toggle('small', text.length > 8);
+    resultEl.classList.toggle('tiny', text.length > 12);
+  }
+
+  function updateDisplay(){
+    if (justEvaluated) {
+      exprEl.textContent = completedExpr ? completedExpr + ' =' : '\u00A0';
+      setResultText(display || '0');
+      updateClearLabel();
+      return;
+    }
+
+    // iPhone-style behaviour: show the CALCULATION while entering it.
+    exprEl.textContent = '\u00A0';
+    setResultText(display || '0');
+    updateClearLabel();
+  }
+
+  function updateClearLabel(){
+    var clearButtons = document.querySelectorAll('[data-act="clear"]');
+    var label = (!display || (justEvaluated && display === '0')) ? 'AC' : 'C';
+    clearButtons.forEach(function(btn){ btn.textContent = label; });
+  }
+
+  function resetRepeat(){
+    repeatOp = null;
+    repeatOperand = null;
+  }
+
   function append(token){
     if (justEvaluated){
-      var startFresh = /^[0-9.(]/.test(token) || token === '\u03C0' || token === 'e';
-      if (startFresh) { display = ''; }
+      // Digits/constants/functions start a new calculation.
+      var startsFresh = /^[0-9.(]/.test(token) || token === '\u03C0' || token === 'e' ||
+                        /^[a-z]/i.test(token);
+      if (startsFresh) {
+        display = '';
+        completedExpr = '';
+        resetRepeat();
+      }
       justEvaluated = false;
     }
     display += token;
     updateDisplay();
   }
 
-  function handleDigit(d){ append(d); }
+  function handleDigit(d){
+    if (justEvaluated) {
+      display = '';
+      completedExpr = '';
+      justEvaluated = false;
+      resetRepeat();
+    }
+
+    // Prevent absurd leading zero strings like 00005.
+    var seg = getCurrentNumberSegment();
+    if (seg === '0' && d === '0') return;
+    if (seg === '0' && d !== '0') {
+      display = display.slice(0, -1) + d;
+    } else {
+      display += d;
+    }
+    updateDisplay();
+  }
 
   function handleOp(sym){
-    if (!display.length) { if (sym === '\u2212') { append(sym); } return; }
+    if (!display.length) {
+      if (sym === '\u2212') {
+        display = sym;
+        justEvaluated = false;
+        updateDisplay();
+      }
+      return;
+    }
+
+    if (justEvaluated) {
+      justEvaluated = false;
+      completedExpr = '';
+    }
+
     var last = display.slice(-1);
-    if ('\u00F7\u00D7\u2212+^'.includes(last)) {
+    if (OPERATORS.includes(last)) {
       display = display.slice(0, -1) + sym;
       updateDisplay();
       return;
     }
-    append(sym);
-  }
 
-  function handleDecimal(){
-    var parts = display.split(/[\u00F7\u00D7\u2212+^(]/);
-    var current = parts[parts.length-1];
-    if (current.includes('.')) return;
-    append(current.length === 0 ? '0.' : '.');
-  }
+    if (last === '(' && sym !== '\u2212') return;
 
-  function handleFn(name){ append(name + '('); }
-  function handleConst(name){ append(name === 'pi' ? '\u03C0' : 'e'); }
-
-  function handleParen(){
-    var opens = (display.match(/\(/g)||[]).length;
-    var closes = (display.match(/\)/g)||[]).length;
-    var last = display.slice(-1);
-    if (opens > closes && /[0-9)]/.test(last)) { append(')'); } else { append('('); }
-  }
-
-  function handleSign(){
-    var val = evaluate(rawify(display));
-    if (val === null || display === '') return;
-    val = val * -1;
-    display = fmtNum(val);
+    display += sym;
     updateDisplay();
   }
 
-  function handlePercent(){
-    if (!display.length) return;
-    var last = display.slice(-1);
-    if (!/[0-9]/.test(last)) return;
+  function getCurrentNumberSegment(){
+    var m = display.match(/(?:^|[\u00F7\u00D7\u2212+^()])(-?\d*\.?\d*)$/);
+    if (!m) return '';
+    return m[1] || '';
+  }
 
-    // Apple-style percent behaviour for simple A +/- B cases.
-    var m = display.match(/^(.+?)([+\u2212])(\d+(?:\.\d+)?)$/);
-    if (m) {
-      var base = evaluate(rawify(m[1]));
-      var pct = parseFloat(m[3]);
-      if (base !== null && !isNaN(pct)) {
-        var amount = base * pct / 100;
-        display = m[1] + m[2] + fmtNum(amount);
+  function handleDecimal(){
+    if (justEvaluated) {
+      display = '';
+      completedExpr = '';
+      justEvaluated = false;
+      resetRepeat();
+    }
+    var current = getCurrentNumberSegment();
+    if (current.includes('.')) return;
+    if (!display.length || OPERATORS.includes(display.slice(-1)) || display.slice(-1) === '(') {
+      display += '0.';
+    } else {
+      display += '.';
+    }
+    updateDisplay();
+  }
+
+  function handleFn(name){
+    if (justEvaluated) {
+      display = '';
+      completedExpr = '';
+      justEvaluated = false;
+      resetRepeat();
+    }
+    display += name + '(';
+    updateDisplay();
+  }
+
+  function handleConst(name){
+    if (justEvaluated) {
+      display = '';
+      completedExpr = '';
+      justEvaluated = false;
+      resetRepeat();
+    }
+    display += name === 'pi' ? '\u03C0' : 'e';
+    updateDisplay();
+  }
+
+  function handleParen(){
+    if (justEvaluated) {
+      display = '';
+      completedExpr = '';
+      justEvaluated = false;
+      resetRepeat();
+    }
+    var opens = (display.match(/\(/g)||[]).length;
+    var closes = (display.match(/\)/g)||[]).length;
+    var last = display.slice(-1);
+
+    if (opens > closes && /[0-9)\u03C0e]/.test(last)) {
+      display += ')';
+    } else {
+      if (/[0-9)\u03C0e]/.test(last)) display += '\u00D7';
+      display += '(';
+    }
+    updateDisplay();
+  }
+
+  function handleSign(){
+    if (!display.length) return;
+
+    if (justEvaluated) {
+      var val = parseFloat(display);
+      if (!isNaN(val)) {
+        display = fmtNum(-val);
+        completedExpr = '';
+        justEvaluated = true;
+        resetRepeat();
         updateDisplay();
-        return;
       }
+      return;
     }
 
-    display += '%';
+    // Toggle the current trailing numeric operand.
+    var m = display.match(/(-?\d+(?:\.\d+)?)$/);
+    if (!m) return;
+
+    var num = m[1];
+    var start = display.length - num.length;
+
+    if (num.charAt(0) === '-') {
+      display = display.slice(0, start) + num.slice(1);
+    } else {
+      // Use parentheses to keep maths valid when negating an operand after another operator.
+      display = display.slice(0, start) + '(-' + num + ')';
+    }
+    updateDisplay();
+  }
+
+  function findLastBinaryParts(){
+    // Supports the common calculator case: left-expression OP numeric-right-operand.
+    // Finds the last visible binary operator, ignoring a leading minus.
+    var depth = 0;
+    for (var i = display.length - 1; i >= 0; i--) {
+      var ch = display[i];
+      if (ch === ')') { depth++; continue; }
+      if (ch === '(') { depth--; continue; }
+      if (depth !== 0) continue;
+      if (OPERATORS.includes(ch)) {
+        if (i === 0 && ch === '\u2212') continue;
+        var left = display.slice(0, i);
+        var right = display.slice(i + 1);
+        if (left && right) return {left:left, op:ch, right:right, index:i};
+      }
+    }
+    return null;
+  }
+
+  function handlePercent(){
+    if (!display.length || justEvaluated) {
+      var solo = parseFloat(display);
+      if (!isNaN(solo)) {
+        display = fmtNum(solo / 100);
+        completedExpr = '';
+        justEvaluated = false;
+        updateDisplay();
+      }
+      return;
+    }
+
+    var parts = findLastBinaryParts();
+
+    // Single number: 50% -> 0.5
+    if (!parts) {
+      var val = evaluate(rawify(display));
+      if (val !== null) {
+        display = fmtNum(val / 100);
+        updateDisplay();
+      }
+      return;
+    }
+
+    var leftVal = evaluate(rawify(parts.left));
+    var rightVal = evaluate(rawify(parts.right));
+    if (leftVal === null || rightVal === null) return;
+
+    var pctValue;
+    if (parts.op === '+' || parts.op === '\u2212') {
+      // 100 + 10% -> 100 + 10
+      pctValue = leftVal * rightVal / 100;
+    } else {
+      // 100 × 10% -> 100 × 0.1 ; 100 ÷ 10% -> 100 ÷ 0.1
+      pctValue = rightVal / 100;
+    }
+
+    display = parts.left + parts.op + fmtNum(pctValue);
     updateDisplay();
   }
 
   function handleBack(){
-    if (justEvaluated){ handleClear(); return; }
+    if (justEvaluated){
+      display = '';
+      completedExpr = '';
+      justEvaluated = false;
+      resetRepeat();
+      updateDisplay();
+      return;
+    }
     display = display.slice(0, -1);
     updateDisplay();
   }
 
   function handleClear(){
     display = '';
+    completedExpr = '';
     justEvaluated = false;
+    resetRepeat();
     updateDisplay();
   }
 
-  function handleEquals(){
+  function handleClearEntry(){
     if (!display.length) return;
-    var expr = rawify(display);
-    var val = evaluate(expr);
-    if (val === null) { resultEl.textContent = 'Error'; return; }
-    history.push({ expr: display, result: fmtNum(val) });
+    if (justEvaluated){
+      display = '';
+      completedExpr = '';
+      justEvaluated = false;
+      resetRepeat();
+      updateDisplay();
+      return;
+    }
+
+    display = display.replace(/\d*\.?\d+\)?$/, '');
+    updateDisplay();
+  }
+
+  function captureRepeatOperation(expr){
+    var oldDisplay = display;
+    display = expr;
+    var parts = findLastBinaryParts();
+    display = oldDisplay;
+
+    if (!parts) {
+      resetRepeat();
+      return;
+    }
+
+    var rightVal = evaluate(rawify(parts.right));
+    if (rightVal === null) {
+      resetRepeat();
+      return;
+    }
+
+    repeatOp = parts.op;
+    repeatOperand = rightVal;
+  }
+
+  function handleEquals(){
+    // Repeated equals: 5 + 2 = 7, = 9, = 11
+    if (justEvaluated && repeatOp !== null && repeatOperand !== null) {
+      var current = parseFloat(display);
+      if (isNaN(current)) return;
+      var repeatedExpr = fmtNum(current) + repeatOp + fmtNum(repeatOperand);
+      var repeatedVal = evaluate(rawify(repeatedExpr));
+      if (repeatedVal === null) return;
+
+      completedExpr = repeatedExpr;
+      display = fmtNum(repeatedVal);
+      history.push({expr:completedExpr, result:display});
+      saveHistory();
+      renderHistory();
+      justEvaluated = true;
+      updateDisplay();
+      return;
+    }
+
+    if (!display.length) return;
+
+    // Ignore equals if expression ends with an operator.
+    if (OPERATORS.includes(display.slice(-1))) return;
+
+    var expr = display;
+    var val = evaluate(rawify(expr));
+    if (val === null) {
+      setResultText('Error');
+      return;
+    }
+
+    captureRepeatOperation(expr);
+
+    completedExpr = expr;
+    display = fmtNum(val);
+    history.push({expr:completedExpr, result:display});
     saveHistory();
     renderHistory();
-    exprEl.textContent = display + ' =';
-    display = fmtNum(val);
-    resultEl.textContent = display;
-    resultEl.classList.toggle('small', display.length > 8); resultEl.classList.toggle('tiny', display.length > 12);
+
     justEvaluated = true;
+    updateDisplay();
+  }
+
+  function escapeHtml(str){
+    return String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
   }
 
   function renderHistory(){
@@ -769,9 +1043,11 @@
       historyList.innerHTML = '<div class="history-empty">No calculations yet</div>';
       return;
     }
+
     historyList.innerHTML = history.slice(-30).map(function(h){
       return '<div class="history-item" data-res="'+encodeURIComponent(h.result)+'">' +
-        '<div class="h-expr">'+h.expr+' =</div><div class="h-res">'+h.result+'</div></div>';
+        '<div class="h-expr">'+escapeHtml(h.expr)+' =</div>' +
+        '<div class="h-res">'+escapeHtml(h.result)+'</div></div>';
     }).join('');
   }
 
@@ -779,21 +1055,31 @@
     var item = e.target.closest('.history-item');
     if (!item) return;
     display = decodeURIComponent(item.getAttribute('data-res'));
+    completedExpr = '';
     justEvaluated = true;
+    resetRepeat();
     updateDisplay();
     historyPanel.classList.remove('open');
   });
+
   clearHistoryBtn.addEventListener('click', function(){
-    history = []; saveHistory(); renderHistory();
+    history = [];
+    saveHistory();
+    renderHistory();
   });
-  historyBtn.addEventListener('click', function(){ historyPanel.classList.toggle('open'); });
+
+  historyBtn.addEventListener('click', function(){
+    historyPanel.classList.toggle('open');
+  });
 
   function bindPad(pad){
     pad.addEventListener('click', function(e){
       var btn = e.target.closest('button.key');
       if (!btn) return;
+
       var act = btn.getAttribute('data-act');
       var val = btn.getAttribute('data-val');
+
       switch(act){
         case 'digit': handleDigit(val); break;
         case 'op': handleOp(val); break;
@@ -804,11 +1090,12 @@
         case 'sign': handleSign(); break;
         case 'percent': handlePercent(); break;
         case 'back': handleBack(); break;
-        case 'clear': handleClear(); break;
+        case 'clear': if (btn.textContent === 'C') { handleClearEntry(); } else { handleClear(); } break;
         case 'equals': handleEquals(); break;
       }
     });
   }
+
   bindPad(padBasic);
   bindPad(padSci);
 
@@ -817,11 +1104,13 @@
     modeBasic.classList.toggle('active', mode==='basic');
     modeSci.classList.toggle('active', mode==='sci');
     modeConvert.classList.toggle('active', mode==='convert');
+
     padBasic.style.display = mode==='basic' ? 'grid' : 'none';
     padSci.style.display = mode==='sci' ? 'grid' : 'none';
     padConvert.style.display = mode==='convert' ? 'flex' : 'none';
     displayPanel.style.display = mode==='convert' ? 'none' : 'flex';
   }
+
   modeBasic.addEventListener('click', function(){ setMode('basic'); });
   modeSci.addEventListener('click', function(){ setMode('sci'); });
   modeConvert.addEventListener('click', function(){ setMode('convert'); });
@@ -829,6 +1118,7 @@
   document.addEventListener('keydown', function(e){
     if (currentMode === 'convert') return;
     var k = e.key;
+
     if (/^[0-9]$/.test(k)) { handleDigit(k); return; }
     if (k === '.') { handleDecimal(); return; }
     if (k === '+') { handleOp('+'); return; }
@@ -847,21 +1137,29 @@
     toastEl.textContent = msg;
     toastEl.classList.add('show');
     clearTimeout(showToast._t);
-    showToast._t = setTimeout(function(){ toastEl.classList.remove('show'); }, 1200);
+    showToast._t = setTimeout(function(){
+      toastEl.classList.remove('show');
+    },1200);
   }
 
   function copyText(text){
     function done(){ showToast('Copied'); }
+
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(fallbackCopy);
-    } else { fallbackCopy(); }
+    } else {
+      fallbackCopy();
+    }
+
     function fallbackCopy(){
       try{
         var ta = document.createElement('textarea');
         ta.value = text;
-        ta.style.position = 'fixed'; ta.style.left = '-9999px';
+        ta.style.position='fixed';
+        ta.style.left='-9999px';
         document.body.appendChild(ta);
-        ta.focus(); ta.select();
+        ta.focus();
+        ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
         done();
@@ -869,199 +1167,270 @@
     }
   }
 
-  function bindLongPressCopy(el, getText){
+  function bindLongPressCopy(el,getText){
     var timer;
-    function start(){ timer = setTimeout(function(){ copyText(getText()); }, 480); }
-    function cancel(){ clearTimeout(timer); }
-    el.addEventListener('touchstart', start, {passive:true});
-    el.addEventListener('touchend', cancel);
-    el.addEventListener('touchmove', cancel);
-    el.addEventListener('mousedown', start);
-    el.addEventListener('mouseup', cancel);
-    el.addEventListener('mouseleave', cancel);
-  }
-  bindLongPressCopy(resultEl, function(){ return resultEl.textContent; });
 
-  var pasteTarget = 'calc';
+    function start(){
+      timer=setTimeout(function(){
+        copyText(getText());
+      },480);
+    }
+
+    function cancel(){
+      clearTimeout(timer);
+    }
+
+    el.addEventListener('touchstart',start,{passive:true});
+    el.addEventListener('touchend',cancel);
+    el.addEventListener('touchmove',cancel);
+    el.addEventListener('mousedown',start);
+    el.addEventListener('mouseup',cancel);
+    el.addEventListener('mouseleave',cancel);
+  }
+
+  bindLongPressCopy(resultEl,function(){
+    return resultEl.textContent;
+  });
+
+  var pasteTarget='calc';
+
   if (pasteBtn) {
-    pasteBtn.addEventListener('click', function(){
-      pasteTarget = currentMode === 'convert' ? 'convert' : 'calc';
+    pasteBtn.addEventListener('click',function(){
+      pasteTarget=currentMode==='convert'?'convert':'calc';
       pasteOverlay.classList.add('open');
-      pasteInput.value = '';
+      pasteInput.value='';
       pasteInput.focus();
     });
   }
-  pasteInput.addEventListener('input', function(){
-    var v = pasteInput.value.trim();
-    var num = parseFloat(v.replace(/,/g,''));
-    if (!isNaN(num)) {
-      if (pasteTarget === 'convert') {
-        convValueInput.value = num.toString();
+
+  pasteInput.addEventListener('input',function(){
+    var v=pasteInput.value.trim();
+    var num=parseFloat(v.replace(/,/g,''));
+
+    if (!isNaN(num)){
+      if (pasteTarget==='convert'){
+        convValueInput.value=num.toString();
         updateConversion();
-      } else {
-        if (justEvaluated) { display = ''; justEvaluated = false; }
-        display += num.toString();
+      }else{
+        display=num.toString();
+        completedExpr='';
+        justEvaluated=false;
+        resetRepeat();
         updateDisplay();
       }
+
       pasteOverlay.classList.remove('open');
       pasteInput.blur();
       showToast('Pasted');
     }
   });
-  pasteInput.addEventListener('blur', function(){
-    setTimeout(function(){ pasteOverlay.classList.remove('open'); }, 150);
+
+  pasteInput.addEventListener('blur',function(){
+    setTimeout(function(){
+      pasteOverlay.classList.remove('open');
+    },150);
   });
 
-  var CATEGORIES = {
-    length: { label:'Length', units:[
-      {key:'mm', label:'Millimeters', abbr:'mm', factor:0.001},
-      {key:'cm', label:'Centimeters', abbr:'cm', factor:0.01},
-      {key:'m', label:'Meters', abbr:'m', factor:1},
-      {key:'km', label:'Kilometers', abbr:'km', factor:1000},
-      {key:'in', label:'Inches', abbr:'in', factor:0.0254},
-      {key:'ft', label:'Feet', abbr:'ft', factor:0.3048},
-      {key:'yd', label:'Yards', abbr:'yd', factor:0.9144},
-      {key:'mi', label:'Miles', abbr:'mi', factor:1609.344}
-    ], defaultFrom:'km', defaultTo:'mi' },
-    weight: { label:'Weight', units:[
-      {key:'mg', label:'Milligrams', abbr:'mg', factor:0.000001},
-      {key:'g', label:'Grams', abbr:'g', factor:0.001},
-      {key:'kg', label:'Kilograms', abbr:'kg', factor:1},
-      {key:'oz', label:'Ounces', abbr:'oz', factor:0.0283495},
-      {key:'lb', label:'Pounds', abbr:'lb', factor:0.453592},
-      {key:'st', label:'Stone', abbr:'st', factor:6.35029},
-      {key:'t', label:'Tonnes', abbr:'t', factor:1000}
-    ], defaultFrom:'kg', defaultTo:'lb' },
-    temp: { label:'Temperature', units:[
-      {key:'c', label:'Celsius', abbr:'\u00B0C'},
-      {key:'f', label:'Fahrenheit', abbr:'\u00B0F'},
-      {key:'k', label:'Kelvin', abbr:'K'}
-    ], defaultFrom:'c', defaultTo:'f' },
-    volume: { label:'Volume', units:[
-      {key:'ml', label:'Milliliters', abbr:'mL', factor:0.001},
-      {key:'l', label:'Liters', abbr:'L', factor:1},
-      {key:'m3', label:'Cubic meters', abbr:'m\u00B3', factor:1000},
-      {key:'tsp', label:'Teaspoons', abbr:'tsp', factor:0.00492892},
-      {key:'tbsp', label:'Tablespoons', abbr:'tbsp', factor:0.0147868},
-      {key:'floz', label:'Fluid ounces', abbr:'fl oz', factor:0.0295735},
-      {key:'cup', label:'Cups', abbr:'cup', factor:0.24},
-      {key:'pt', label:'Pints', abbr:'pt', factor:0.473176},
-      {key:'qt', label:'Quarts', abbr:'qt', factor:0.946353},
-      {key:'gal', label:'Gallons', abbr:'gal', factor:3.78541}
-    ], defaultFrom:'l', defaultTo:'gal' },
-    area: { label:'Area', units:[
-      {key:'m2', label:'Square meters', abbr:'m\u00B2', factor:1},
-      {key:'km2', label:'Square kilometers', abbr:'km\u00B2', factor:1000000},
-      {key:'ft2', label:'Square feet', abbr:'ft\u00B2', factor:0.092903},
-      {key:'yd2', label:'Square yards', abbr:'yd\u00B2', factor:0.836127},
-      {key:'acre', label:'Acres', abbr:'ac', factor:4046.86},
-      {key:'ha', label:'Hectares', abbr:'ha', factor:10000},
-      {key:'mi2', label:'Square miles', abbr:'mi\u00B2', factor:2589988.11}
-    ], defaultFrom:'m2', defaultTo:'ft2' }
-  };
-  var CAT_ORDER = ['length','weight','temp','volume','area'];
-  var currentCat = 'length', currentFromUnit, currentToUnit;
+  var CATEGORIES={
+    length:{label:'Length',units:[
+      {key:'mm',label:'Millimetres',abbr:'mm',factor:0.001},
+      {key:'cm',label:'Centimetres',abbr:'cm',factor:0.01},
+      {key:'m',label:'Metres',abbr:'m',factor:1},
+      {key:'km',label:'Kilometres',abbr:'km',factor:1000},
+      {key:'in',label:'Inches',abbr:'in',factor:0.0254},
+      {key:'ft',label:'Feet',abbr:'ft',factor:0.3048},
+      {key:'yd',label:'Yards',abbr:'yd',factor:0.9144},
+      {key:'mi',label:'Miles',abbr:'mi',factor:1609.344}
+    ],defaultFrom:'km',defaultTo:'mi'},
 
-  var catRow = document.getElementById('catRow');
-  var fromSelect = document.getElementById('fromSelect');
-  var toSelect = document.getElementById('toSelect');
-  var convValueInput = document.getElementById('convValueInput');
-  var swapBtn = document.getElementById('swapBtn');
-  var convResultValue = document.getElementById('convResultValue');
-  var convResultUnit = document.getElementById('convResultUnit');
+    weight:{label:'Weight',units:[
+      {key:'mg',label:'Milligrams',abbr:'mg',factor:0.000001},
+      {key:'g',label:'Grams',abbr:'g',factor:0.001},
+      {key:'kg',label:'Kilograms',abbr:'kg',factor:1},
+      {key:'oz',label:'Ounces',abbr:'oz',factor:0.028349523125},
+      {key:'lb',label:'Pounds',abbr:'lb',factor:0.45359237},
+      {key:'st',label:'Stone',abbr:'st',factor:6.35029318},
+      {key:'t',label:'Tonnes',abbr:'t',factor:1000}
+    ],defaultFrom:'kg',defaultTo:'lb'},
+
+    temp:{label:'Temperature',units:[
+      {key:'c',label:'Celsius',abbr:'\u00B0C'},
+      {key:'f',label:'Fahrenheit',abbr:'\u00B0F'},
+      {key:'k',label:'Kelvin',abbr:'K'}
+    ],defaultFrom:'c',defaultTo:'f'},
+
+    volume:{label:'Volume',units:[
+      {key:'ml',label:'Millilitres',abbr:'mL',factor:0.001},
+      {key:'l',label:'Litres',abbr:'L',factor:1},
+      {key:'m3',label:'Cubic metres',abbr:'m\u00B3',factor:1000},
+      {key:'tsp',label:'Teaspoons',abbr:'tsp',factor:0.005},
+      {key:'tbsp',label:'Tablespoons (AU)',abbr:'tbsp',factor:0.02},
+      {key:'floz',label:'Fluid ounces (US)',abbr:'fl oz',factor:0.0295735295625},
+      {key:'cup',label:'Cups (AU)',abbr:'cup',factor:0.25},
+      {key:'pt',label:'Pints (US)',abbr:'pt',factor:0.473176473},
+      {key:'qt',label:'Quarts (US)',abbr:'qt',factor:0.946352946},
+      {key:'gal',label:'Gallons (US)',abbr:'gal',factor:3.785411784}
+    ],defaultFrom:'l',defaultTo:'gal'},
+
+    area:{label:'Area',units:[
+      {key:'m2',label:'Square metres',abbr:'m\u00B2',factor:1},
+      {key:'km2',label:'Square kilometres',abbr:'km\u00B2',factor:1000000},
+      {key:'ft2',label:'Square feet',abbr:'ft\u00B2',factor:0.09290304},
+      {key:'yd2',label:'Square yards',abbr:'yd\u00B2',factor:0.83612736},
+      {key:'acre',label:'Acres',abbr:'ac',factor:4046.8564224},
+      {key:'ha',label:'Hectares',abbr:'ha',factor:10000},
+      {key:'mi2',label:'Square miles',abbr:'mi\u00B2',factor:2589988.110336}
+    ],defaultFrom:'m2',defaultTo:'ft2'}
+  };
+
+  var CAT_ORDER=['length','weight','temp','volume','area'];
+  var currentCat='length',currentFromUnit,currentToUnit;
+
+  var catRow=document.getElementById('catRow');
+  var fromSelect=document.getElementById('fromSelect');
+  var toSelect=document.getElementById('toSelect');
+  var convValueInput=document.getElementById('convValueInput');
+  var swapBtn=document.getElementById('swapBtn');
+  var convResultValue=document.getElementById('convResultValue');
+  var convResultUnit=document.getElementById('convResultUnit');
 
   function buildCatChips(){
-    catRow.innerHTML = CAT_ORDER.map(function(key){
-      var c = CATEGORIES[key];
+    catRow.innerHTML=CAT_ORDER.map(function(key){
+      var c=CATEGORIES[key];
       return '<button class="cat-chip'+(key===currentCat?' active':'')+'" data-cat="'+key+'">'+c.label+'</button>';
     }).join('');
   }
-  catRow.addEventListener('click', function(e){
-    var chip = e.target.closest('.cat-chip');
-    if (!chip) return;
-    currentCat = chip.getAttribute('data-cat');
-  
-  // Theme
-  var themeBtn = document.getElementById('themeBtn');
-  function applyTheme(theme){
-    document.body.classList.toggle('dark', theme === 'dark');
-    if (themeBtn) themeBtn.innerHTML = theme === 'dark' ? '&#9788;' : '&#9790;';
-    try{ localStorage.setItem('calc_theme_v2', theme); }catch(e){}
-  }
-  var savedTheme = 'light';
-  try{ savedTheme = localStorage.getItem('calc_theme_v2') || 'light'; }catch(e){}
-  applyTheme(savedTheme);
-  if (themeBtn){
-    themeBtn.addEventListener('click', function(){
-      applyTheme(document.body.classList.contains('dark') ? 'light' : 'dark');
-    });
-  }
 
-  // Prevent iOS double-tap / gesture zoom inside the installed PWA.
-  var lastTouchEnd = 0;
-  document.addEventListener('touchend', function(e){
-    var now = Date.now();
-    if (now - lastTouchEnd <= 300) e.preventDefault();
-    lastTouchEnd = now;
-  }, {passive:false});
-  document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, {passive:false});
-  document.addEventListener('gesturechange', function(e){ e.preventDefault(); }, {passive:false});
-  document.addEventListener('gestureend', function(e){ e.preventDefault(); }, {passive:false});
-  document.addEventListener('dblclick', function(e){ e.preventDefault(); }, {passive:false});
+  catRow.addEventListener('click',function(e){
+    var chip=e.target.closest('.cat-chip');
+    if(!chip)return;
 
-  buildCatChips();
+    currentCat=chip.getAttribute('data-cat');
+    buildCatChips();
     populateSelects();
     updateConversion();
   });
 
   function populateSelects(){
-    var cat = CATEGORIES[currentCat];
-    var opts = cat.units.map(function(u){ return '<option value="'+u.key+'">'+u.label+'</option>'; }).join('');
-    fromSelect.innerHTML = opts;
-    toSelect.innerHTML = opts;
-    fromSelect.value = currentFromUnit = cat.defaultFrom;
-    toSelect.value = currentToUnit = cat.defaultTo;
+    var cat=CATEGORIES[currentCat];
+    var opts=cat.units.map(function(u){
+      return '<option value="'+u.key+'">'+u.label+'</option>';
+    }).join('');
+
+    fromSelect.innerHTML=opts;
+    toSelect.innerHTML=opts;
+    fromSelect.value=currentFromUnit=cat.defaultFrom;
+    toSelect.value=currentToUnit=cat.defaultTo;
   }
-  fromSelect.addEventListener('change', function(){ currentFromUnit = fromSelect.value; updateConversion(); });
-  toSelect.addEventListener('change', function(){ currentToUnit = toSelect.value; updateConversion(); });
-  convValueInput.addEventListener('input', updateConversion);
-  swapBtn.addEventListener('click', function(){
-    var tmp = currentFromUnit; currentFromUnit = currentToUnit; currentToUnit = tmp;
-    fromSelect.value = currentFromUnit; toSelect.value = currentToUnit;
+
+  fromSelect.addEventListener('change',function(){
+    currentFromUnit=fromSelect.value;
     updateConversion();
   });
 
-  function unitAbbr(catKey, unitKey){
-    var u = CATEGORIES[catKey].units.filter(function(x){ return x.key===unitKey; })[0];
-    return u ? u.abbr : '';
+  toSelect.addEventListener('change',function(){
+    currentToUnit=toSelect.value;
+    updateConversion();
+  });
+
+  convValueInput.addEventListener('input',updateConversion);
+
+  swapBtn.addEventListener('click',function(){
+    var tmp=currentFromUnit;
+    currentFromUnit=currentToUnit;
+    currentToUnit=tmp;
+    fromSelect.value=currentFromUnit;
+    toSelect.value=currentToUnit;
+    updateConversion();
+  });
+
+  function unitAbbr(catKey,unitKey){
+    var u=CATEGORIES[catKey].units.filter(function(x){
+      return x.key===unitKey;
+    })[0];
+    return u?u.abbr:'';
   }
-  function convertTemp(v, from, to){
+
+  function convertTemp(v,from,to){
     var c;
-    if (from==='c') c=v; else if (from==='f') c=(v-32)*5/9; else c=v-273.15;
-    if (to==='c') return c;
-    if (to==='f') return c*9/5+32;
+    if(from==='c')c=v;
+    else if(from==='f')c=(v-32)*5/9;
+    else c=v-273.15;
+
+    if(to==='c')return c;
+    if(to==='f')return c*9/5+32;
     return c+273.15;
   }
-  function convertVal(value, fromKey, toKey, catKey){
-    if (catKey === 'temp') return convertTemp(value, fromKey, toKey);
-    var cat = CATEGORIES[catKey];
-    var fromU = cat.units.filter(function(u){ return u.key===fromKey; })[0];
-    var toU = cat.units.filter(function(u){ return u.key===toKey; })[0];
-    return (value * fromU.factor) / toU.factor;
+
+  function convertVal(value,fromKey,toKey,catKey){
+    if(catKey==='temp')return convertTemp(value,fromKey,toKey);
+
+    var cat=CATEGORIES[catKey];
+    var fromU=cat.units.filter(function(u){return u.key===fromKey;})[0];
+    var toU=cat.units.filter(function(u){return u.key===toKey;})[0];
+
+    return(value*fromU.factor)/toU.factor;
   }
+
   function updateConversion(){
-    var val = parseFloat(convValueInput.value);
-    if (isNaN(val)) { convResultValue.textContent = '0'; convResultUnit.textContent = unitAbbr(currentCat, currentToUnit); return; }
-    var result = convertVal(val, currentFromUnit, currentToUnit, currentCat);
-    convResultValue.textContent = fmtNum(result);
-    convResultUnit.textContent = unitAbbr(currentCat, currentToUnit);
+    var val=parseFloat(convValueInput.value);
+
+    if(isNaN(val)){
+      convResultValue.textContent='0';
+      convResultUnit.textContent=unitAbbr(currentCat,currentToUnit);
+      return;
+    }
+
+    var result=convertVal(val,currentFromUnit,currentToUnit,currentCat);
+    convResultValue.textContent=fmtNum(result);
+    convResultUnit.textContent=unitAbbr(currentCat,currentToUnit);
   }
-  bindLongPressCopy(convResultValue, function(){ return convResultValue.textContent; });
+
+  bindLongPressCopy(convResultValue,function(){
+    return convResultValue.textContent;
+  });
+
+  // Theme
+  var themeBtn=document.getElementById('themeBtn');
+
+  function applyTheme(theme){
+    document.body.classList.toggle('dark',theme==='dark');
+    if(themeBtn)themeBtn.innerHTML=theme==='dark'?'&#9788;':'&#9790;';
+    try{localStorage.setItem('calc_theme_v4',theme);}catch(e){}
+  }
+
+  var savedTheme='light';
+  try{
+    savedTheme=localStorage.getItem('calc_theme_v4') ||
+               localStorage.getItem('calc_theme_v2') ||
+               'light';
+  }catch(e){}
+
+  applyTheme(savedTheme);
+
+  if(themeBtn){
+    themeBtn.addEventListener('click',function(){
+      applyTheme(document.body.classList.contains('dark')?'light':'dark');
+    });
+  }
+
+  // Prevent accidental iPhone zoom without interfering with normal single taps.
+  var lastTouchEnd=0;
+
+  document.addEventListener('touchend',function(e){
+    var now=Date.now();
+    if(now-lastTouchEnd<=280)e.preventDefault();
+    lastTouchEnd=now;
+  },{passive:false});
+
+  document.addEventListener('gesturestart',function(e){e.preventDefault();},{passive:false});
+  document.addEventListener('gesturechange',function(e){e.preventDefault();},{passive:false});
+  document.addEventListener('gestureend',function(e){e.preventDefault();},{passive:false});
+  document.addEventListener('dblclick',function(e){e.preventDefault();},{passive:false});
 
   buildCatChips();
   populateSelects();
   updateConversion();
-
   loadHistory();
   updateDisplay();
 })();
@@ -1075,6 +1444,13 @@ if ("serviceWorker" in navigator) {
     });
   });
 }
+</script>
+
+<script>
+// LifeCalc Ultimate modules roadmap:
+// Money: Budget, Weekly Tracker, Savings Goals
+// Finance: Repayments, Loans, Net Worth
+// Business: GST, Margin, Wage, Break-even
 </script>
 </body>
 </html>

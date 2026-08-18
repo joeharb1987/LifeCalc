@@ -1,0 +1,30 @@
+LifeCalc Ultimate Roadmap
+
+V6 Money
+- Budget tracker
+- Weekly income and expenses
+- Spending categories
+- Remaining money view
+
+V7 Finance
+- Mortgage repayments
+- Car loans
+- Business loans
+- Extra repayment savings
+- Savings goals
+
+V8 Wealth
+- Net worth tracker
+- Assets and liabilities
+- Progress charts
+
+V9 Business Tools
+- GST calculator
+- Margin calculator
+- Wage calculator
+- Break-even calculator
+
+Design:
+- Keep existing cream/navy/gold style
+- Thumb-friendly iPhone layout
+- Offline PWA support
