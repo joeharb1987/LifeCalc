@@ -1,0 +1,13 @@
+LifeCalc V6.3 Budget Tracker
+
+Added:
+- Add income/expense transactions
+- Description
+- Amount
+- Income/expense type
+- Local saved transaction history
+- Running balance
+
+Next:
+V6.4 categories and charts
+V7 repayments

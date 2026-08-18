@@ -1,0 +1,34 @@
+LifeCalc Ultimate Feature Roadmap
+
+Budget:
+- Create custom categories
+- Add income
+- Add expenses
+- Add recurring bills
+- Weekly/monthly totals
+- Remaining money dashboard
+
+Finance:
+- Mortgage repayments
+- Car loans
+- Personal loans
+- Business loans
+- Extra repayment savings
+
+Wealth:
+- Savings goals
+- Net worth tracker
+- Assets
+- Debts
+
+Business:
+- GST calculator
+- Margin calculator
+- Wage calculator
+- Break-even calculator
+
+Keep:
+- Calculator
+- Scientific
+- Converter
+- iPhone PWA design

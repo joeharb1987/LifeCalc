@@ -1,0 +1,12 @@
+LifeCalc V6.4 Smart Budget
+
+Added:
+- Budget dashboard
+- Total income
+- Total spending
+- Available money
+- Category spending view
+
+Next:
+V6.5 charts and monthly insights
+V7 finance calculators
