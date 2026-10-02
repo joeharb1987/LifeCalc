@@ -38,6 +38,12 @@ const cases = [
   ['percent mul', '1 0 0 × 1 0 % =', '10'],
   ['percent div', '1 0 0 ÷ 1 0 % =', '1,000'],
   ['percent alone', '5 0 %', '0.5'],
+  // tap the formula above the answer to keep editing it
+  ['formula tap restores', '1 2 + 3 = FORMULA', '12+3'],
+  ['formula tap then edit', '1 2 + 3 = FORMULA 4 =', '46'],
+  ['formula tap then op', '2 × 3 = FORMULA + 1 =', '7'],
+  ['formula tap then delete', '1 2 + 3 4 = FORMULA ⌫ =', '15'],
+  ['formula tap when typing is a no-op', '5 + 2 FORMULA =', '7'],
   ['percent of result', '5 0 = %', '0.5'],
   ['percent then continue', '1 0 % + 1 =', '1.1'],
   ['percent on dangling op ignored', '1 0 + %', '10+'],
@@ -151,6 +157,7 @@ const cases = [
     await p.keyboard.press('Escape');
     let ok = true;
     for (const k of keys.trim().split(/\s+/)) {
+      if (k === 'FORMULA') { await p.click('#exprEl'); continue; }
       const [act, val] = K[k] || ['digit', k];
       const sel = '[data-act="' + act + '"]' + (val ? '[data-val="' + val + '"]' : '');
       const found = await p.evaluate(sel => { const el = document.querySelector('#padBasic ' + sel) || document.querySelector('#padSci ' + sel); if (!el) return false; el.click(); return true; }, sel);
@@ -161,6 +168,10 @@ const cases = [
     if (got === want) pass++;
     else fail.push(`${name}: [${keys}] → "${got}" (want "${want}")`);
   }
+  // AC shows C while typing, AC after = or when empty
+  const lbl = async ks => { await p.keyboard.press('Escape'); for (const k of ks) await p.click('#padBasic [data-act="' + k[0] + '"]' + (k[1] ? '[data-val="' + k[1] + '"]' : '')); return (await p.textContent('#padBasic [data-act="clear"]')).trim(); };
+  const labels = [[[], 'AC'], [[['digit', '5']], 'C'], [[['digit', '5'], ['equals']], 'AC'], [[['digit', '5'], ['back']], 'AC']];
+  for (const [ks, want] of labels) { const got = await lbl(ks); if (got === want) pass++; else fail.push('clear label ' + JSON.stringify(ks) + ' → ' + got + ' (want ' + want + ')'); }
   // keyboard
   const kb = [['12*(3+4)', 'Enter', '84'], ['7/2', 'Enter', '3.5'], ['9-12', '=', '−3'], ['5x5', 'Enter', '25'], ['2^8', 'Enter', '256'], ['1,5+1', 'Enter', '2.5'], ['123', 'Backspace', '12'], ['99', 'Escape', '0'], ['50%', '', '0.5']];
   for (const [typed, last, want] of kb) {
@@ -190,7 +201,7 @@ const cases = [
   const bad = mash.bad.length;
   mash.bad.slice(0, 5).forEach(x => fail.push('mash: ' + x));
   console.log('random sequences with bad output: ' + bad + '/3000 (' + mash.ms + 'ms)');
-  const total = cases.length + kb.length;
+  const total = cases.length + kb.length + labels.length;
   console.log(pass + '/' + total + ' pass');
   fail.forEach(f => console.log('  ✗ ' + f));
   if (errs.length) console.log('page errors:', errs);
