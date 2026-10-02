@@ -314,3 +314,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Keep scrolled content from showing under the iPhone status bar */
 body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--bg); z-index: 50; pointer-events: none; }
+
+/* Net worth calculation total */
+.nw-total { background: var(--sunken); }
+.nw-total .name, .nw-total .amt { font-size: 17px; font-weight: 800; }
