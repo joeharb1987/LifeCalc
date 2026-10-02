@@ -473,12 +473,28 @@
   }
 
 
+.key sup{font-size:.55em;line-height:0;position:relative;top:-.55em;margin-left:1px;vertical-align:baseline;}
 /* V6.2 performance polish */
 button.key:active{
   transform:scale(.96);
 }
 .result,.expr{
   contain:layout paint;
+}
+
+/* Fit everything above the bottom bar on any screen: the display gives up space first,
+   then the keys shrink (never below a comfortable tap size). */
+.display{flex:1 1 auto;min-height:104px;}
+.pad.basic{grid-template-rows:repeat(5,minmax(46px,1fr));height:min(50dvh,500px);}
+.pad.sci{grid-template-rows:repeat(7,minmax(36px,1fr));height:min(56dvh,550px);}
+@media (max-height:620px){
+  .pad.basic{height:46dvh;gap:7px;}
+  .pad.sci{height:54dvh;gap:6px;}
+  .result{font-size:46px;min-height:50px;}
+  .result.small{font-size:38px;}
+  .result.tiny{font-size:30px;}
+  .expr{font-size:18px;min-height:22px;}
+  .pad.sci button.key{font-size:20px;border-radius:16px;}
 }
 
 /* Shared LifeCalc bottom bar (same items as the Budget pages) */
@@ -569,7 +585,7 @@ button.key:active{
 
     <button class="key k-sci" data-act="const" data-val="pi">&pi;</button>
     <button class="key k-sci" data-act="const" data-val="e">e</button>
-    <button class="key k-op" data-act="op" data-val="^">x&#8318;</button>
+    <button class="key k-op" data-act="op" data-val="^" aria-label="Power">x<sup>y</sup></button>
     <button class="key k-op" data-act="op" data-val="&divide;">&divide;</button>
 
     <button class="key" data-act="digit" data-val="7">7</button>
@@ -587,7 +603,7 @@ button.key:active{
     <button class="key" data-act="digit" data-val="3">3</button>
     <button class="key k-op" data-act="op" data-val="+">+</button>
 
-    <button class="key" data-act="paren" data-val="(">(</button>
+    <button class="key" data-act="paren" data-val="(" aria-label="Brackets">( )</button>
     <button class="key" data-act="digit" data-val="0">0</button>
     <button class="key" data-act="decimal">.</button>
     <button class="key k-eq" data-act="equals">=</button>
@@ -638,16 +654,20 @@ button.key:active{
   var pasteOverlay = document.getElementById('pasteOverlay');
   var pasteInput = document.getElementById('pasteInput');
 
-  var display = '';
-  var completedExpr = '';
-  var justEvaluated = false;
+  var display = '';          // expression being built, e.g. "12×(3+4)" — uses − × ÷ and sqrt( etc.
+  var completedExpr = '';    // expression shown above the result after =
+  var justEvaluated = false; // display holds a result
+  var entryCleared = false;  // C was just used, so the key now reads AC
   var history = [];
   var currentMode = 'basic';
   var repeatOp = null;
   var repeatOperand = null;
+  var carry = null;          // { text, value }: the full-precision number behind a displayed result
 
-  var OP_MAP = { '\u00F7':'/', '\u00D7':'*', '\u2212':'-', '+':'+', '^':'**' };
-  var OPERATORS = '\u00F7\u00D7\u2212+^';
+  var OPERATORS = '÷×−+^';
+  function isOperator(c){ return !!c && c.length === 1 && OPERATORS.indexOf(c) >= 0; }
+  var MINUS = '−';
+  var FN_RE = /(sin|cos|tan|ln|log|sqrt)\($/;
 
   function loadHistory(){
     try{
@@ -662,51 +682,130 @@ button.key:active{
     try{ localStorage.setItem('calc_history_v4', JSON.stringify(history.slice(-30))); }catch(e){}
   }
 
+  // ---------- Numbers ----------
+  // Result → display text. Uses − for negatives and E for scientific notation
+  // (lower-case e is the constant), integers up to 15 digits shown in full.
   function fmtNum(n){
     if (!isFinite(n)) return 'Error';
-    if (Math.abs(n) < 1e-12) n = 0;
-    var abs = Math.abs(n);
-    var s;
-    if ((abs >= 1e12) || (abs > 0 && abs < 1e-9)) {
-      s = n.toExponential(8).replace(/\.?0+e/, 'e');
+    if (Math.abs(n) < 1e-14) n = 0;
+    var abs = Math.abs(n), s;
+    if (abs >= 1e15 || (abs > 0 && abs < 1e-9)) {
+      s = n.toExponential(9).replace(/\.?0+e/, 'e');
     } else {
-      s = Number(n.toPrecision(12)).toString();
+      var whole = Number(n.toPrecision(15));
+      var v = Number.isInteger(whole) ? whole : Number(n.toPrecision(12));
+      s = String(v);
+      if (/e/.test(s)) s = v.toExponential().replace(/\.?0+e/, 'e');
     }
-    return s;
+    return s.replace('e+', 'E+').replace('e-', 'E−').replace(/^-/, MINUS);
   }
 
-  function rawify(disp){
-    var s = disp;
-    Object.keys(OP_MAP).forEach(function(k){ s = s.split(k).join(OP_MAP[k]); });
-    return s;
+  function parseDisplayNum(s){
+    return parseFloat(String(s).replace(/,/g, '').replace(/−/g, '-').replace('E', 'e'));
   }
+
+  // Thousands separators on integer parts, √ for sqrt — display only.
+  function prettify(expr){
+    return String(expr)
+      .replace(/sqrt\(/g, '√(')
+      .replace(/(\d+)(\.\d*)?/g, function(m, int, frac, offset, whole){
+        if (whole.charAt(offset - 1) === 'E' || whole.charAt(offset - 2) === 'E') return m;  // exponent digits
+        return int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (frac || '');
+      });
+  }
+
+  // ---------- Expression parser (no eval) ----------
+  // Precedence: unary minus < ^ (right-assoc), so −2^2 = −4 and 2^3^2 = 512.
+  // Implicit multiplication: 2π, 2(3), (2)(3), 2√9. Missing ) are closed at the end.
+  function tokenize(s){
+    var t = [], i = 0, m;
+    while (i < s.length) {
+      var c = s.charAt(i), rest = s.slice(i);
+      // A carried-over result keeps its full precision (the display shows it rounded).
+      if (carry && (i === 0 || s.charAt(i - 1) === '(') && rest.indexOf(carry.text) === 0 && !/^[0-9.E]/.test(rest.slice(carry.text.length))) {
+        t.push({ k:'num', v: carry.value }); i += carry.text.length; continue;
+      }
+      if ((m = rest.match(/^(\d+\.?\d*|\.\d+)(E[+−-]?\d+)?/))) {
+        t.push({ k:'num', v: parseDisplayNum(m[0]) }); i += m[0].length; continue;
+      }
+      if (c === '.') throw new Error('bad number');
+      if (c === 'π') { t.push({ k:'num', v: Math.PI }); i++; continue; }
+      if (c === 'e') { t.push({ k:'num', v: Math.E }); i++; continue; }
+      if ((m = rest.match(/^(sin|cos|tan|ln|log|sqrt)(?=\()/))) { t.push({ k:'fn', v: m[1] }); i += m[1].length; continue; }
+      if (c === '+' ) { t.push({ k:'op', v:'+' }); i++; continue; }
+      if (c === MINUS || c === '-') {
+        // A minus where a value is expected, directly before a number, is part of that number
+        // (−2^2 = 4 and 2^−2 = 0.25, as on a phone calculator).
+        var prev = t[t.length - 1], unary = !prev || prev.k === 'op' || prev.k === '(';
+        if (unary && (m = s.slice(i + 1).match(/^(\d+\.?\d*|\.\d+)(E[+\u2212-]?\d+)?/))) {
+          t.push({ k:'num', v: -parseDisplayNum(m[0]) }); i += 1 + m[0].length; continue;
+        }
+        t.push({ k:'op', v:'-' }); i++; continue;
+      }
+      if (c === '×' || c === '*') { t.push({ k:'op', v:'*' }); i++; continue; }
+      if (c === '÷' || c === '/') { t.push({ k:'op', v:'/' }); i++; continue; }
+      if (c === '^') { t.push({ k:'op', v:'^' }); i++; continue; }
+      if (c === '(' || c === ')') { t.push({ k:c }); i++; continue; }
+      if (c === ' ' || c === ',') { i++; continue; }
+      throw new Error('bad token ' + c);
+    }
+    return t;
+  }
+
+  var FNS = { sin: Math.sin, cos: Math.cos, tan: Math.tan, ln: Math.log, log: Math.log10, sqrt: Math.sqrt };
 
   function evaluate(expr){
     if (!expr) return null;
     try{
-      var cleaned = expr
-        .replace(/\u03C0/g, 'Math.PI')
-        .replace(/\be\b/g, 'Math.E')
-        .replace(/sqrt\(/g, 'Math.sqrt(')
-        .replace(/sin\(/g, 'Math.sin(')
-        .replace(/cos\(/g, 'Math.cos(')
-        .replace(/tan\(/g, 'Math.tan(')
-        .replace(/ln\(/g, 'Math.log(')
-        .replace(/log\(/g, 'Math.log10(');
-
-      // Do not auto-evaluate if the expression visibly ends with an operator.
-      if (/[+\-*/]$/.test(cleaned) || cleaned.endsWith('**')) return null;
-
-      var openCount = (cleaned.match(/\(/g)||[]).length;
-      var closeCount = (cleaned.match(/\)/g)||[]).length;
-      for (var i=0;i<openCount-closeCount;i++) cleaned += ')';
-
-      var val = Function('"use strict"; return (' + cleaned + ')')();
-      if (typeof val !== 'number' || isNaN(val) || !isFinite(val)) return null;
+      var t = tokenize(expr), p = 0;
+      var peek = function(){ return t[p]; };
+      var isOp = function(v){ var x = t[p]; return x && x.k === 'op' && x.v === v; };
+      var parseExpr = function(){
+        var v = parseTerm();
+        while (isOp('+') || isOp('-')) { var o = t[p++].v, r = parseTerm(); v = o === '+' ? v + r : v - r; }
+        return v;
+      };
+      var startsValue = function(x){ return x && (x.k === 'num' || x.k === '(' || x.k === 'fn'); };
+      var parseTerm = function(){
+        var v = parseUnary();
+        for (;;) {
+          if (isOp('*')) { p++; v *= parseUnary(); }
+          else if (isOp('/')) { p++; v /= parseUnary(); }
+          else if (startsValue(peek())) { v *= parseUnary(); }   // implicit ×
+          else return v;
+        }
+      };
+      var parseUnary = function(){
+        if (isOp('-')) { p++; return -parseUnary(); }
+        if (isOp('+')) { p++; return parseUnary(); }
+        return parsePower();
+      };
+      var parsePower = function(){
+        var base = parsePrimary();
+        if (isOp('^')) { p++; return Math.pow(base, parseUnary()); }
+        return base;
+      };
+      var parsePrimary = function(){
+        var x = t[p++];
+        if (!x) throw new Error('unexpected end');
+        if (x.k === 'num') return x.v;
+        if (x.k === '(') {
+          var v = parseExpr();
+          if (t[p] && t[p].k === ')') p++;
+          else if (t[p]) throw new Error('expected )');
+          return v;
+        }
+        if (x.k === 'fn') return FNS[x.v](parsePrimary());
+        throw new Error('unexpected ' + x.k);
+      };
+      var val = parseExpr();
+      if (p < t.length) throw new Error('trailing');
+      if (typeof val !== 'number' || !isFinite(val)) return null;
       return val;
     }catch(e){ return null; }
   }
 
+  // ---------- Display ----------
   function setResultText(text){
     text = (text === null || text === undefined || text === '') ? '0' : String(text);
     resultEl.textContent = text;
@@ -715,347 +814,311 @@ button.key:active{
   }
 
   function updateDisplay(){
-    if (justEvaluated) {
-      exprEl.textContent = completedExpr ? completedExpr + ' =' : '\u00A0';
-      setResultText(display || '0');
-      updateClearLabel();
-      return;
-    }
-
-    // iPhone-style behaviour: show the CALCULATION while entering it.
-    exprEl.textContent = '\u00A0';
-    setResultText(display || '0');
+    exprEl.textContent = justEvaluated && completedExpr ? prettify(completedExpr) + ' =' : ' ';
+    setResultText(prettify(display || '0'));
     updateClearLabel();
   }
 
+  function clearLabel(){ return (!display || justEvaluated || entryCleared) ? 'AC' : 'C'; }
   function updateClearLabel(){
-    var clearButtons = document.querySelectorAll('[data-act="clear"]');
-    var label = (!display || (justEvaluated && display === '0')) ? 'AC' : 'C';
-    clearButtons.forEach(function(btn){ btn.textContent = label; });
+    var label = clearLabel();
+    document.querySelectorAll('[data-act="clear"]').forEach(function(btn){ btn.textContent = label; });
   }
 
-  function resetRepeat(){
-    repeatOp = null;
-    repeatOperand = null;
-  }
+  function resetRepeat(){ repeatOp = null; repeatOperand = null; }
 
-  function append(token){
-    if (justEvaluated){
-      // Digits/constants/functions start a new calculation.
-      var startsFresh = /^[0-9.(]/.test(token) || token === '\u03C0' || token === 'e' ||
-                        /^[a-z]/i.test(token);
-      if (startsFresh) {
-        display = '';
-        completedExpr = '';
-        resetRepeat();
-      }
-      justEvaluated = false;
-    }
-    display += token;
-    updateDisplay();
-  }
+  function lastChar(){ return display.slice(-1); }
+  // True when the display ends with something a number could follow by implicit ×.
+  function endsWithValue(){ return /[0-9.)πe]$/.test(display); }
+  function endsWithClosedValue(){ return /[)πe]$/.test(display); }
 
-  function handleDigit(d){
+  // Called before any input: a result is either continued (operators) or replaced (new numbers).
+  function beginInput(keepResult){
     if (justEvaluated) {
-      display = '';
+      if (!keepResult) { display = ''; carry = null; }
       completedExpr = '';
       justEvaluated = false;
       resetRepeat();
     }
+    entryCleared = false;
+  }
 
-    // Prevent absurd leading zero strings like 00005.
-    var seg = getCurrentNumberSegment();
-    if (seg === '0' && d === '0') return;
-    if (seg === '0' && d !== '0') {
-      display = display.slice(0, -1) + d;
-    } else {
-      display += d;
+  function currentNumber(){
+    var m = display.match(/(\d*\.?\d*(?:E[+−]?\d*)?)$/);
+    return m ? m[1] : '';
+  }
+
+  // ---------- Keys ----------
+  function handleDigit(d){
+    beginInput(false);
+    if (endsWithClosedValue()) display += '×';
+    var seg = currentNumber();
+    if (seg === '0') {
+      if (d === '0') { updateDisplay(); return; }
+      display = display.slice(0, -1);
     }
+    display += d;
+    updateDisplay();
+  }
+
+  function handleDecimal(){
+    beginInput(false);
+    if (currentNumber().indexOf('.') >= 0 || /E/.test(currentNumber())) { updateDisplay(); return; }
+    if (endsWithClosedValue()) display += '×';
+    display += /[0-9]$/.test(display) ? '.' : '0.';
     updateDisplay();
   }
 
   function handleOp(sym){
-    if (!display.length) {
-      if (sym === '\u2212') {
-        display = sym;
-        justEvaluated = false;
-        updateDisplay();
-      }
-      return;
-    }
-
-    if (justEvaluated) {
-      justEvaluated = false;
-      completedExpr = '';
-    }
-
-    var last = display.slice(-1);
-    if (OPERATORS.includes(last)) {
-      display = display.slice(0, -1) + sym;
+    beginInput(true);
+    var last = lastChar();
+    if (!display || last === '(') {
+      if (sym === MINUS) display += MINUS;          // unary minus
       updateDisplay();
       return;
     }
-
-    if (last === '(' && sym !== '\u2212') return;
-
+    if (isOperator(last)) {
+      var before = display.slice(0, -1);
+      if (!before || before.slice(-1) === '(') {     // the operator there is a unary minus
+        if (sym !== MINUS) display = before;
+        updateDisplay();
+        return;
+      }
+      if (last === '^' && sym === MINUS) {           // 2^−2: negative exponent
+        display += MINUS;
+        updateDisplay();
+        return;
+      }
+      if (isOperator(before.slice(-1))) {            // "2^−" then + → "2+"
+        display = before.slice(0, -1) + sym;
+        updateDisplay();
+        return;
+      }
+      display = before + sym;                        // swap one operator for another
+      updateDisplay();
+      return;
+    }
+    if (FN_RE.test(display)) return;
     display += sym;
     updateDisplay();
   }
 
-  function getCurrentNumberSegment(){
-    var m = display.match(/(?:^|[\u00F7\u00D7\u2212+^()])(-?\d*\.?\d*)$/);
-    if (!m) return '';
-    return m[1] || '';
-  }
-
-  function handleDecimal(){
-    if (justEvaluated) {
-      display = '';
-      completedExpr = '';
-      justEvaluated = false;
-      resetRepeat();
-    }
-    var current = getCurrentNumberSegment();
-    if (current.includes('.')) return;
-    if (!display.length || OPERATORS.includes(display.slice(-1)) || display.slice(-1) === '(') {
-      display += '0.';
-    } else {
-      display += '.';
-    }
+  function openParen(){
+    beginInput(false);
+    if (endsWithValue()) display += '×';
+    display += '(';
     updateDisplay();
+  }
+  function closeParen(){
+    beginInput(true);
+    var opens = (display.match(/\(/g) || []).length, closes = (display.match(/\)/g) || []).length;
+    if (opens > closes && endsWithValue()) display += ')';
+    updateDisplay();
+  }
+  // The single ( ) key closes when a bracket is open and a value was just entered, otherwise opens.
+  function handleParen(){
+    var opens = (display.match(/\(/g) || []).length, closes = (display.match(/\)/g) || []).length;
+    if (!justEvaluated && opens > closes && endsWithValue()) closeParen();
+    else openParen();
   }
 
   function handleFn(name){
-    if (justEvaluated) {
-      display = '';
-      completedExpr = '';
-      justEvaluated = false;
-      resetRepeat();
+    if (justEvaluated) {                            // apply to the result: 16 = √ → √(16
+      var res = display;
+      beginInput(false);
+      display = name + '(' + res;
+      updateDisplay();
+      return;
     }
+    beginInput(false);
+    if (endsWithValue()) display += '×';
     display += name + '(';
     updateDisplay();
   }
 
   function handleConst(name){
-    if (justEvaluated) {
-      display = '';
-      completedExpr = '';
-      justEvaluated = false;
-      resetRepeat();
-    }
-    display += name === 'pi' ? '\u03C0' : 'e';
+    beginInput(false);
+    if (endsWithValue()) display += '×';
+    display += name === 'pi' ? 'π' : 'e';
     updateDisplay();
   }
 
-  function handleParen(){
-    if (justEvaluated) {
-      display = '';
-      completedExpr = '';
-      justEvaluated = false;
-      resetRepeat();
+  // Index where the trailing operand starts (number, constant, (−n) or a bracketed group), or -1.
+  function trailingOperandStart(){
+    if (!display) return -1;
+    if (lastChar() === ')') {
+      var depth = 0;
+      for (var i = display.length - 1; i >= 0; i--) {
+        var ch = display.charAt(i);
+        if (ch === ')') depth++;
+        else if (ch === '(') { depth--; if (depth === 0) { var f = display.slice(0, i).match(/(sin|cos|tan|ln|log|sqrt)$/); return f ? i - f[1].length : i; } }
+      }
+      return -1;
     }
-    var opens = (display.match(/\(/g)||[]).length;
-    var closes = (display.match(/\)/g)||[]).length;
-    var last = display.slice(-1);
-
-    if (opens > closes && /[0-9)\u03C0e]/.test(last)) {
-      display += ')';
-    } else {
-      if (/[0-9)\u03C0e]/.test(last)) display += '\u00D7';
-      display += '(';
-    }
-    updateDisplay();
+    var m = display.match(/(\d*\.?\d+\.?(?:E[+−]?\d+)?|[πe])$/);
+    return m ? display.length - m[1].length : -1;
   }
 
   function handleSign(){
-    if (!display.length) return;
-
     if (justEvaluated) {
-      var val = parseFloat(display);
-      if (!isNaN(val)) {
-        display = fmtNum(-val);
-        completedExpr = '';
-        justEvaluated = true;
-        resetRepeat();
-        updateDisplay();
+      var v = parseDisplayNum(display);
+      if (!isNaN(v)) {
+        var full = carry && carry.text === display ? carry.value : v;
+        display = fmtNum(-full); carry = { text: display, value: -full };
+        completedExpr = ''; resetRepeat(); updateDisplay();
       }
       return;
     }
-
-    // Toggle the current trailing numeric operand.
-    var m = display.match(/(-?\d+(?:\.\d+)?)$/);
-    if (!m) return;
-
-    var num = m[1];
-    var start = display.length - num.length;
-
-    if (num.charAt(0) === '-') {
-      display = display.slice(0, start) + num.slice(1);
+    entryCleared = false;
+    if (!display) { display = MINUS; updateDisplay(); return; }
+    if (display === MINUS) { display = ''; updateDisplay(); return; }
+    var start = trailingOperandStart();
+    if (start < 0) return;
+    var operand = display.slice(start), head = display.slice(0, start);
+    var neg = operand.match(/^\(−(.*)\)$/);
+    if (neg && evaluate(operand) !== null && neg[1].indexOf('(') < 0) {
+      display = head + neg[1];                       // (−5) → 5
+    } else if (head === MINUS) {
+      display = operand;                             // −5 → 5
+    } else if (!head) {
+      display = MINUS + operand;                     // 5 → −5
     } else {
-      // Use parentheses to keep maths valid when negating an operand after another operator.
-      display = display.slice(0, start) + '(-' + num + ')';
+      display = head + '(' + MINUS + operand + ')';  // 3×5 → 3×(−5)
     }
     updateDisplay();
   }
 
-  function findLastBinaryParts(){
-    // Supports the common calculator case: left-expression OP numeric-right-operand.
-    // Finds the last visible binary operator, ignoring a leading minus.
+  // Last binary operator at bracket depth 0 (a minus right after an operator, '(' or E is unary).
+  function findLastBinaryParts(expr){
+    expr = expr === undefined ? display : expr;
     var depth = 0;
-    for (var i = display.length - 1; i >= 0; i--) {
-      var ch = display[i];
+    for (var i = expr.length - 1; i > 0; i--) {
+      var ch = expr.charAt(i);
       if (ch === ')') { depth++; continue; }
       if (ch === '(') { depth--; continue; }
-      if (depth !== 0) continue;
-      if (OPERATORS.includes(ch)) {
-        if (i === 0 && ch === '\u2212') continue;
-        var left = display.slice(0, i);
-        var right = display.slice(i + 1);
-        if (left && right) return {left:left, op:ch, right:right, index:i};
-      }
+      if (depth !== 0 || !isOperator(ch)) continue;
+      if (!/[0-9.)πe]/.test(expr.charAt(i - 1))) continue;
+      var left = expr.slice(0, i), right = expr.slice(i + 1);
+      if (left && right) return { left:left, op:ch, right:right };
     }
     return null;
   }
 
   function handlePercent(){
-    if (!display.length || justEvaluated) {
-      var solo = parseFloat(display);
-      if (!isNaN(solo)) {
-        display = fmtNum(solo / 100);
-        completedExpr = '';
-        justEvaluated = false;
-        updateDisplay();
-      }
-      return;
-    }
-
-    var parts = findLastBinaryParts();
-
-    // Single number: 50% -> 0.5
-    if (!parts) {
-      var val = evaluate(rawify(display));
-      if (val !== null) {
-        display = fmtNum(val / 100);
-        updateDisplay();
-      }
-      return;
-    }
-
-    var leftVal = evaluate(rawify(parts.left));
-    var rightVal = evaluate(rawify(parts.right));
-    if (leftVal === null || rightVal === null) return;
-
-    var pctValue;
-    if (parts.op === '+' || parts.op === '\u2212') {
-      // 100 + 10% -> 100 + 10
-      pctValue = leftVal * rightVal / 100;
-    } else {
-      // 100 × 10% -> 100 × 0.1 ; 100 ÷ 10% -> 100 ÷ 0.1
-      pctValue = rightVal / 100;
-    }
-
-    display = parts.left + parts.op + fmtNum(pctValue);
-    updateDisplay();
-  }
-
-  function handleBack(){
-    if (justEvaluated){
-      display = '';
-      completedExpr = '';
-      justEvaluated = false;
+    if (justEvaluated) {
+      var v = parseDisplayNum(display);
+      if (isNaN(v)) return;
+      if (carry && carry.text === display) v = carry.value;
+      completedExpr = display + '%';
+      display = fmtNum(v / 100);
+      carry = { text: display, value: v / 100 };
       resetRepeat();
       updateDisplay();
       return;
     }
-    display = display.slice(0, -1);
+    entryCleared = false;
+    if (!display || !endsWithValue()) return;
+    var parts = findLastBinaryParts();
+    if (!parts) {                                    // 50% → 0.5
+      var whole = evaluate(display);
+      if (whole !== null) { display = fmtNum(whole / 100); updateDisplay(); }
+      return;
+    }
+    var leftVal = evaluate(parts.left), rightVal = evaluate(parts.right);
+    if (leftVal === null || rightVal === null) return;
+    // 100 + 10% → 100 + 10 ; 100 × 10% → 100 × 0.1
+    var pct = (parts.op === '+' || parts.op === MINUS) ? leftVal * rightVal / 100 : rightVal / 100;
+    display = parts.left + parts.op + operandText(pct);
+    updateDisplay();
+  }
+
+  function operandText(v){ return v < 0 ? '(' + fmtNum(v) + ')' : fmtNum(v); }
+
+  function handleBack(){
+    if (justEvaluated) {                             // edit the result
+      carry = null;
+      completedExpr = '';
+      justEvaluated = false;
+      resetRepeat();
+      if (/E|Error/.test(display)) display = '';
+    }
+    entryCleared = false;
+    var fn = display.match(FN_RE);
+    display = fn ? display.slice(0, -fn[0].length) : display.slice(0, -1);
+    if (display === MINUS + '0' ) display = '';
     updateDisplay();
   }
 
   function handleClear(){
     display = '';
+    carry = null;
     completedExpr = '';
     justEvaluated = false;
+    entryCleared = false;
     resetRepeat();
     updateDisplay();
   }
 
+  // C: remove the number being typed; the key then reads AC.
   function handleClearEntry(){
-    if (!display.length) return;
-    if (justEvaluated){
-      display = '';
-      completedExpr = '';
-      justEvaluated = false;
-      resetRepeat();
-      updateDisplay();
-      return;
-    }
-
-    display = display.replace(/\d*\.?\d+\)?$/, '');
+    if (justEvaluated || !display) { handleClear(); return; }
+    var m = display.match(/(\(−)?(\d*\.?\d+\.?(?:E[+−]?\d*)?|\d+\.|[πe])\)?$/);
+    if (!m || isOperator(lastChar()) || lastChar() === '(') { handleClear(); return; }
+    display = display.slice(0, display.length - m[0].length);
+    entryCleared = true;
     updateDisplay();
-  }
-
-  function captureRepeatOperation(expr){
-    var oldDisplay = display;
-    display = expr;
-    var parts = findLastBinaryParts();
-    display = oldDisplay;
-
-    if (!parts) {
-      resetRepeat();
-      return;
-    }
-
-    var rightVal = evaluate(rawify(parts.right));
-    if (rightVal === null) {
-      resetRepeat();
-      return;
-    }
-
-    repeatOp = parts.op;
-    repeatOperand = rightVal;
   }
 
   function handleEquals(){
     // Repeated equals: 5 + 2 = 7, = 9, = 11
-    if (justEvaluated && repeatOp !== null && repeatOperand !== null) {
-      var current = parseFloat(display);
+    if (justEvaluated) {
+      if (repeatOp === null) return;
+      var current = carry && carry.text === display ? carry.value : parseDisplayNum(display);
       if (isNaN(current)) return;
-      var repeatedExpr = fmtNum(current) + repeatOp + fmtNum(repeatOperand);
-      var repeatedVal = evaluate(rawify(repeatedExpr));
-      if (repeatedVal === null) return;
-
+      var repeatedExpr = operandText(current) + repeatOp + operandText(repeatOperand);
+      var saved = carry; carry = null;
+      var repeated = evaluate(repeatedExpr);
+      carry = saved;
+      if (repeated === null) { showError(repeatedExpr); return; }
       completedExpr = repeatedExpr;
-      display = fmtNum(repeatedVal);
-      history.push({expr:completedExpr, result:display});
-      saveHistory();
-      renderHistory();
-      justEvaluated = true;
+      display = fmtNum(repeated);
+      carry = { text: display, value: repeated };
+      history.push({ expr: completedExpr, result: display });
+      saveHistory(); renderHistory();
       updateDisplay();
       return;
     }
-
-    if (!display.length) return;
-
-    // Ignore equals if expression ends with an operator.
-    if (OPERATORS.includes(display.slice(-1))) return;
-
+    if (!display) return;
     var expr = display;
-    var val = evaluate(rawify(expr));
-    if (val === null) {
-      setResultText('Error');
-      return;
-    }
+    while (expr && (isOperator(expr.slice(-1)) || expr.slice(-1) === '(')) expr = expr.slice(0, -1);  // ignore a dangling operator
+    if (!expr) return;
+    var val = evaluate(expr);
+    if (val === null) { showError(expr); return; }
 
-    captureRepeatOperation(expr);
+    var parts = findLastBinaryParts(expr), rightVal = parts ? evaluate(parts.right) : null;
+    if (parts && rightVal !== null) { repeatOp = parts.op; repeatOperand = rightVal; } else resetRepeat();
 
-    completedExpr = expr;
+    var opens = (expr.match(/\(/g) || []).length, closes = (expr.match(/\)/g) || []).length;
+    completedExpr = expr + new Array(Math.max(0, opens - closes) + 1).join(')');
     display = fmtNum(val);
-    history.push({expr:completedExpr, result:display});
-    saveHistory();
-    renderHistory();
-
+    carry = { text: display, value: val };
+    history.push({ expr: completedExpr, result: display });
+    saveHistory(); renderHistory();
     justEvaluated = true;
+    entryCleared = false;
     updateDisplay();
+  }
+
+  // Show Error with the failed sum above it; the next key starts a new calculation.
+  function showError(expr){
+    carry = null;
+    completedExpr = expr;
+    display = '';
+    justEvaluated = true;
+    entryCleared = false;
+    resetRepeat();
+    updateDisplay();
+    setResultText('Error');
   }
 
   function escapeHtml(str){
@@ -1074,17 +1137,21 @@ button.key:active{
 
     historyList.innerHTML = history.slice(-30).map(function(h){
       return '<div class="history-item" data-res="'+encodeURIComponent(h.result)+'">' +
-        '<div class="h-expr">'+escapeHtml(h.expr)+' =</div>' +
-        '<div class="h-res">'+escapeHtml(h.result)+'</div></div>';
+        '<div class="h-expr">'+escapeHtml(prettify(h.expr))+' =</div>' +
+        '<div class="h-res">'+escapeHtml(prettify(h.result))+'</div></div>';
     }).join('');
   }
 
   historyList.addEventListener('click', function(e){
     var item = e.target.closest('.history-item');
     if (!item) return;
-    display = decodeURIComponent(item.getAttribute('data-res'));
+    // Older history may hold "-5" / "1e+16"; normalise to the current display form.
+    var v = parseDisplayNum(decodeURIComponent(item.getAttribute('data-res')));
+    if (isNaN(v)) return;
+    display = fmtNum(v);
     completedExpr = '';
     justEvaluated = true;
+    entryCleared = false;
     resetRepeat();
     updateDisplay();
     historyPanel.classList.remove('open');
@@ -1118,7 +1185,7 @@ button.key:active{
         case 'sign': handleSign(); break;
         case 'percent': handlePercent(); break;
         case 'back': handleBack(); break;
-        case 'clear': if (btn.textContent === 'C') { handleClearEntry(); } else { handleClear(); } break;
+        case 'clear': if (clearLabel() === 'C') handleClearEntry(); else handleClear(); break;
         case 'equals': handleEquals(); break;
       }
     });
@@ -1126,6 +1193,18 @@ button.key:active{
 
   bindPad(padBasic);
   bindPad(padSci);
+
+  // Swipe left or right across the display to delete the last digit (as on iPhone).
+  (function(){
+    var sx = null, sy = null;
+    displayPanel.addEventListener('touchstart', function(e){ var t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive:true });
+    displayPanel.addEventListener('touchend', function(e){
+      if (sx === null || historyPanel.classList.contains('open')) return;
+      var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) handleBack();
+    });
+  })();
 
   function setMode(mode){
     currentMode = mode;
@@ -1144,21 +1223,23 @@ button.key:active{
   modeConvert.addEventListener('click', function(){ setMode('convert'); });
 
   document.addEventListener('keydown', function(e){
-    if (currentMode === 'convert') return;
+    if (currentMode === 'convert' || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
     var k = e.key;
 
     if (/^[0-9]$/.test(k)) { handleDigit(k); return; }
-    if (k === '.') { handleDecimal(); return; }
+    if (k === '.' || k === ',') { handleDecimal(); return; }
     if (k === '+') { handleOp('+'); return; }
-    if (k === '-') { handleOp('\u2212'); return; }
-    if (k === '*') { handleOp('\u00D7'); return; }
-    if (k === '/') { e.preventDefault(); handleOp('\u00F7'); return; }
+    if (k === '-') { handleOp(MINUS); return; }
+    if (k === '*' || k === 'x' || k === 'X') { handleOp('×'); return; }
+    if (k === '/') { e.preventDefault(); handleOp('÷'); return; }
     if (k === '^') { handleOp('^'); return; }
-    if (k === '(' || k === ')') { handleParen(); return; }
+    if (k === '(') { openParen(); return; }
+    if (k === ')') { closeParen(); return; }
     if (k === '%') { handlePercent(); return; }
     if (k === 'Enter' || k === '=') { e.preventDefault(); handleEquals(); return; }
     if (k === 'Backspace') { handleBack(); return; }
-    if (k === 'Escape') { handleClear(); return; }
+    if (k === 'Escape' || k === 'Delete') { handleClear(); return; }
   });
 
   function showToast(msg){
@@ -1240,9 +1321,10 @@ button.key:active{
         convValueInput.value=num.toString();
         updateConversion();
       }else{
-        display=num.toString();
+        display=fmtNum(num);
         completedExpr='';
         justEvaluated=false;
+        entryCleared=false;
         resetRepeat();
         updateDisplay();
       }
@@ -1401,7 +1483,7 @@ button.key:active{
   }
 
   function updateConversion(){
-    var val=parseFloat(convValueInput.value);
+    var val=parseFloat(String(convValueInput.value).replace(/,/g,'').replace(/\u2212/g,'-'));
 
     if(isNaN(val)){
       convResultValue.textContent='0';
@@ -1410,7 +1492,7 @@ button.key:active{
     }
 
     var result=convertVal(val,currentFromUnit,currentToUnit,currentCat);
-    convResultValue.textContent=fmtNum(result);
+    convResultValue.textContent=prettify(fmtNum(result));
     convResultUnit.textContent=unitAbbr(currentCat,currentToUnit);
   }
 
@@ -1442,15 +1524,7 @@ button.key:active{
     });
   }
 
-  // Prevent accidental iPhone zoom without interfering with normal single taps.
-  var lastTouchEnd=0;
-
-  document.addEventListener('touchend',function(e){
-    var now=Date.now();
-    if(now-lastTouchEnd<=280)e.preventDefault();
-    lastTouchEnd=now;
-  },{passive:false});
-
+  // Pinch zoom is blocked; double-tap zoom is already off via touch-action: manipulation.
   document.addEventListener('gesturestart',function(e){e.preventDefault();},{passive:false});
   document.addEventListener('gesturechange',function(e){e.preventDefault();},{passive:false});
   document.addEventListener('gestureend',function(e){e.preventDefault();},{passive:false});
@@ -1476,22 +1550,18 @@ if ("serviceWorker" in navigator) {
 
 <script>
 (function(){
-  // V6.2 fast touch response
-  document.querySelectorAll('button').forEach(function(btn){
-    btn.addEventListener('touchstart', function(){
-      btn.style.transform='scale(.96)';
-    }, {passive:true});
-    btn.addEventListener('touchend', function(){
-      btn.style.transform='';
-    }, {passive:true});
-  });
-
-  // Avoid iOS delayed click behaviour on calculator keys.
+  // Fast taps on the keypad: press on touchend without the browser's click delay,
+  // but only if the finger lifts on the same key (sliding off cancels, like iOS).
   document.querySelectorAll('button.key').forEach(function(btn){
+    btn.addEventListener('touchstart', function(){ btn.style.transform = 'scale(.96)'; }, { passive:true });
+    btn.addEventListener('touchcancel', function(){ btn.style.transform = ''; });
     btn.addEventListener('touchend', function(e){
-      e.preventDefault();
-      btn.click();
-    }, {passive:false});
+      btn.style.transform = '';
+      e.preventDefault();                       // stop the delayed synthetic click (no double press)
+      var t = e.changedTouches[0];
+      var under = t && document.elementFromPoint(t.clientX, t.clientY);
+      if (under && btn.contains(under)) btn.click();
+    }, { passive:false });
   });
 })();
 </script>
