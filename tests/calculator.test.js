@@ -4,9 +4,12 @@ let pw; try { pw = require('playwright'); } catch (e) { pw = require(require('ch
 const { chromium } = pw;
 const URL = process.argv[2] || 'http://localhost:8765/index.html';
 // Key names map to data-act/data-val buttons on the pads.
-const K = { '÷': ['op', '÷'], '×': ['op', '×'], '−': ['op', '−'], '+': ['op', '+'], '^': ['op', '^'], '=': ['equals'], '.': ['decimal'], 'AC': ['clear'], 'C': ['clear'],
-  '±': ['sign'], '%': ['percent'], '⌫': ['back'], '(': ['paren'], 'π': ['const', 'pi'], 'e': ['const', 'e'], 'sin': ['fn', 'sin'], 'cos': ['fn', 'cos'], 'tan': ['fn', 'tan'],
-  'ln': ['fn', 'ln'], 'log': ['fn', 'log'], '√': ['fn', 'sqrt'] };
+const K = { '÷': ['op', '÷'], '×': ['op', '×'], '−': ['op', '−'], '+': ['op', '+'], '^': ['op', '^'], '=': ['equals'], '.': ['decimal'], 'AC': ['clear'], '⌫': ['back'],
+  '±': ['sign'], '%': ['percent'], '(': ['open'], ')': ['close'], 'π': ['const', 'pi'], 'e': ['const', 'e'], 'Rand': ['const', 'rand'],
+  'sin': ['unary', 'sin'], 'cos': ['unary', 'cos'], 'tan': ['unary', 'tan'], 'sin⁻¹': ['unary', 'asin'], 'sinh': ['unary', 'sinh'],
+  'ln': ['unary', 'ln'], 'log': ['unary', 'log'], 'log₂': ['unary', 'log2'], '√': ['unary', 'sqrt'], '∛': ['unary', 'cbrt'],
+  'x²': ['unary', 'sq'], 'x³': ['unary', 'cube'], '1/x': ['unary', 'inv'], 'x!': ['unary', 'fact'], 'eˣ': ['unary', 'exp'], '10ˣ': ['unary', 'pow10'], '2ˣ': ['unary', 'pow2'],
+  'ʸ√': ['op', '√'], 'EE': ['ee'], 'Rad': ['angle'], '2nd': ['second'], 'mc': ['mem', 'mc'], 'm+': ['mem', 'm+'], 'm−': ['mem', 'm-'], 'mr': ['mem', 'mr'] };
 const cases = [
   // basic arithmetic
   ['add', '2 + 3 =', '5'],
@@ -78,11 +81,18 @@ const cases = [
   ['2π', '2 π =', '6.28318530718'],
   ['π2', 'π 2 =', '6.28318530718'],
   ['ππ', 'π π =', '9.86960440109'],
-  ['sin π', 'sin π =', '0'],
+  ['sin π (rad)', 'Rad sin π = Rad', '0'],
+  ['sin 30 (degrees by default)', 'sin 3 0 =', '0.5'],
+  ['30 sin acts on number', '3 0 sin =', '0.5'],
+  ['tan 90 is Error', '9 0 tan =', 'Error'],
+  ['sin⁻¹ via 2nd', '2nd 0 . 5 sin⁻¹ = 2nd', '30'],
+  ['sinh (rad)', 'Rad 0 sinh = Rad', '0'],
   ['cos 0', 'cos 0 =', '1'],
-  ['tan π/4', 'tan π ÷ 4 =', '1'],
+  ['tan π/4 (rad)', 'Rad tan ( π ÷ 4 ) = Rad', '1'],
+  ['tan 45', '4 5 tan =', '1'],
   ['sqrt', '√ 1 6 =', '4'],
-  ['2√9', '2 √ 9 =', '6'],
+  ['√ acts on the number', '9 √ =', '3'],
+  ['2 × √9', '2 × √ 9 =', '6'],
   ['√ of result', '1 6 = √ =', '4'],
   ['√ after result then new number', '1 6 = √ 8 1 =', '9'],
   ['√ of big result keeps precision', '9 9 9 9 9 9 9 × 9 9 9 9 9 9 9 × 9 9 9 = √ =', '316,069,580.979'],
@@ -99,15 +109,38 @@ const cases = [
   ['power right-assoc', '2 ^ 3 ^ 2 =', '512'],
   ['power of result', '3 = ^ 2 =', '9'],
   ['parens auto-close', '( 2 + 3 × 4 =', '14'],
-  ['paren then digit', '( 2 + 3 ( 4 =', '20'],
-  ['paren then decimal', '( 2 + 3 ( . 5 =', '2.5'],
+  ['paren then digit', '( 2 + 3 ) 4 =', '20'],
+  ['paren then decimal', '( 2 + 3 ) . 5 =', '2.5'],
   ['digit then paren', '2 ( 3 + 1 =', '8'],
-  ['nested parens', '( ( 1 + 2 ( × 3 ( =', '9'],
-  ['unary minus in paren', '( − 3 ( × 2 =', '−6'],
+  ['nested parens', '( ( 1 + 2 ) × 3 ) =', '9'],
+  ['unary minus in paren', '( − 3 ) × 2 =', '−6'],
   ['backspace', '1 2 3 ⌫ =', '12'],
   ['backspace fn', 'sin ⌫ 5 =', '5'],
   ['delete after result edits it', '1 2 3 = ⌫', '12'],
   ['backspace to empty', '7 ⌫', '0'],
+  ['x²', '5 x² =', '25'],
+  ['x³', '2 x³ =', '8'],
+  ['negative x²', '5 ± x² =', '25'],
+  ['1/x', '4 1/x =', '0.25'],
+  ['x!', '5 x! =', '120'],
+  ['0!', '0 x! =', '1'],
+  ['non-integer x! (gamma)', '0 . 5 x! =', '0.886226925453'],
+  ['factorial in a sum', '3 x! + 1 =', '7'],
+  ['eˣ', '1 eˣ =', '2.71828182846'],
+  ['10ˣ', '3 10ˣ =', '1,000'],
+  ['2ˣ via 2nd', '2nd 1 0 2ˣ = 2nd', '1,024'],
+  ['log₂ via 2nd', '2nd 8 log₂ = 2nd', '3'],
+  ['∛', '2 7 ∛ =', '3'],
+  ['∛ of negative', '2 7 ± ∛ =', '−3'],
+  ['ʸ√x', '8 ʸ√ 3 =', '2'],
+  ['EE', '2 EE 3 =', '2,000'],
+  ['EE negative exponent', '2 EE − 3 =', '0.002'],
+  ['x² of result', '3 = x² =', '9'],
+  ['x² after result then digit starts fresh', '3 = x² 4 =', '4'],
+  ['memory add', 'mc 5 m+ AC 3 m+ AC mr =', '8'],
+  ['memory subtract', 'mc 1 0 m+ 4 m− AC mr =', '6'],
+  ['mr in a sum', 'mc 2 m+ AC 1 + mr = mc', '3'],
+  ['Rand × 0', 'Rand × 0 =', '0'],
 ];
 (async () => {
   const b = await chromium.launch(); const p = await (await b.newContext({ viewport: { width: 393, height: 852 } })).newPage();
@@ -147,7 +180,7 @@ const cases = [
       const seq = [];
       for (let i = 0; i < 14; i++) {
         const sel = sels[Math.floor(Math.random() * sels.length)]; seq.push(sel.replace(/\[data-(act|val)="([^"]*)"\]/g, '$2 ').trim());
-        const el = document.querySelector('#padBasic ' + sel) || document.querySelector('#padSci ' + sel); el.click();
+        const el = document.querySelector('#padBasic ' + sel) || document.querySelector('#padSci ' + sel); if (el) el.click();
       }
       const out = document.getElementById('resultEl').textContent + ' | ' + document.getElementById('exprEl').textContent;
       if (/NaN|undefined|Infinity|null/.test(out)) bad.push(seq.join(', ') + ' → ' + out);
