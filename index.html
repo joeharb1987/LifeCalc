@@ -94,7 +94,7 @@ button{cursor:pointer;}
   padding:0 calc((100% - (4 * var(--key) + 3 * var(--gap))) / 2 + 6px) 10px;overflow:hidden;}
 .expr{min-height:30px;color:var(--text-dim);text-align:right;font-size:28px;font-weight:400;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;direction:ltr;letter-spacing:-.01em;cursor:pointer;}
-.result{color:var(--text);text-align:right;font-size:88px;font-weight:300;line-height:1.05;letter-spacing:-.035em;white-space:nowrap;
+.result{color:var(--text);text-align:right;font-size:68px;font-weight:300;line-height:1.05;letter-spacing:-.035em;white-space:nowrap;
   overflow:hidden;cursor:pointer;font-variant-numeric:tabular-nums;}
 
 /* ---------- Keypad ---------- */
@@ -545,7 +545,8 @@ html{background:#000;}
     var key = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--key')) || 76;
     // Also fit the height left in the display (it is short in Scientific on small phones).
     var room = displayPanel.clientHeight - exprEl.offsetHeight - 12;
-    var max = Math.min(96, key * 1.12, room > 0 ? room / 1.08 : 96);
+    // iPhone proportions: the answer is about 0.84 of the key width (~68pt on a 6.1" phone).
+    var max = Math.min(80, key * 0.84, room > 0 ? room / 1.08 : 80);
     fitText(resultEl, Math.round(Math.max(28, max)));
   }
 
