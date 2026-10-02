@@ -52,4 +52,6 @@ Items outside their start/end dates aren't counted. Everything counts as househo
 
 **Asset categories** (`assetCats`) – `id, name, icon, order`. An asset's `type` is one of these ids; defaults are bank/cash, kids savings, super, shares, crypto, property, vehicles, business, valuables, other, and users can add their own. Assets, debts, categories and items all carry an `order` set by drag and drop.
 
+**Budget screen** – six tiles (Income, Expenses, Left over; Assets, Debts, Net worth), a runway line (cash in Bank accounts & cash ÷ average weekly spending over the last 13 weeks of bank data, or the budget if there's none), then Earnings, Expenses (category cards) and One-offs. Rows: tap to edit, swipe left to delete; Edit in a section header shows drag grips. Manual lines with matching bank transactions show `Budget $x · Bank avg $y`.
+
 **Net worth** = every asset − every active debt (one combined household). Debts without a balance are listed as not yet subtracted. `nwHistory` keeps one snapshot per day the value changes, for the chart.
