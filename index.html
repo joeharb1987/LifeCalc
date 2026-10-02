@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="LifeCalc">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" type="image/svg+xml" href="./lifecalc-icon.svg">
@@ -76,7 +76,7 @@ button{cursor:pointer;}
 
 .app{
   position:relative;width:100%;max-width:480px;height:100dvh;margin:0 auto;display:flex;flex-direction:column;
-  padding:calc(env(safe-area-inset-top) + 6px) 16px calc(env(safe-area-inset-bottom) + 74px);
+  padding:calc(env(safe-area-inset-top) + 6px) 16px calc(env(safe-area-inset-bottom) + 64px);
 }
 
 /* ---------- Top bar ---------- */
@@ -100,7 +100,7 @@ button{cursor:pointer;}
 /* ---------- Keypad ---------- */
 .pad{display:grid;justify-content:center;flex:0 0 auto;}
 .pad.basic{grid-template-columns:repeat(4,var(--key));grid-auto-rows:var(--key);gap:var(--gap);padding-top:var(--gap);}
-.pad.sci{grid-template-columns:repeat(5,1fr);grid-auto-rows:var(--sci-row,40px);column-gap:calc(var(--gap) * .7);row-gap:calc(var(--gap) * .7);
+.pad.sci{grid-template-columns:repeat(6,1fr);grid-auto-rows:var(--sci-row,40px);column-gap:var(--sgap,8px);row-gap:var(--sgap,8px);
   width:calc(4 * var(--key) + 3 * var(--gap));margin:0 auto;}
 .pad[hidden]{display:none;}
 
@@ -115,7 +115,15 @@ button.key:active,button.key.pressed{background:var(--digit-press);transition:no
 .k-fn{background:linear-gradient(180deg,#6E6E70,#575759)!important;color:var(--fn-text)!important;font-size:calc(var(--key) * .36)!important;}
 .k-op,.k-eq{background:linear-gradient(180deg,#F5A447,#EE9330)!important;color:var(--op-text)!important;font-size:calc(var(--key) * .48)!important;font-weight:500!important;}
 button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:var(--op-active-text)!important;}
-.k-sci{background:var(--sci)!important;color:var(--sci-text)!important;font-size:calc(var(--key) * .26)!important;}
+.k-sci{background:var(--sci)!important;color:var(--sci-text)!important;font-size:min(calc(var(--sci-row,40px) * .42),17px)!important;}
+.k-sci.second-on,.k-sci.mem-on{background:#5C5C5F!important;}
+.k-sci sub{font-size:.62em;}
+.angle-badge{position:absolute;left:calc((100% - (4 * var(--key) + 3 * var(--gap))) / 2 + 6px);bottom:22px;font-size:15px;color:var(--text-dim);}
+.angle-badge[hidden]{display:none;}
+.clip-menu{position:absolute;z-index:35;display:flex;background:#2C2C2E;border-radius:10px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+.clip-menu[hidden]{display:none;}
+.clip-menu button{border:0;background:transparent;color:#fff;font-size:15px;padding:10px 16px;}
+.clip-menu button + button{border-left:1px solid rgba(255,255,255,.15);}
 .k-sci.k-sci-op{color:var(--op)!important;}
 .key svg{width:42%;height:42%;}
 .k-fn svg{width:44%;height:44%;}
@@ -178,12 +186,13 @@ button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:v
 /* ---------- Shared LifeCalc bottom bar (same items as the Budget pages) ---------- */
 .lc-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--top-btn);border-top:1px solid var(--key-border);
   padding-bottom:env(safe-area-inset-bottom);}
-body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
-.lc-tabbar-inner{max-width:480px;margin:0 auto;height:64px;display:grid;grid-template-columns:repeat(5,1fr);}
-.lc-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--text-dim);
+body.dark .lc-tabbar{background:#000;border-top-color:rgba(255,255,255,.08);}
+html{background:#000;}
+.lc-tabbar-inner{max-width:480px;margin:0 auto;height:54px;display:grid;grid-template-columns:repeat(5,1fr);}
+.lc-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--text-dim);
   text-decoration:none;font-size:11px;font-weight:600;}
 .lc-tabbar a.on{color:var(--amber);}
-.lc-tabbar svg{width:23px;height:23px;}
+.lc-tabbar svg{width:22px;height:22px;}
 </style>
 </head>
 <body class="dark">
@@ -204,6 +213,8 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     <div class="expr" id="exprEl">&nbsp;</div>
     <div class="result" id="resultEl">0</div>
     <div class="toast" id="toastEl">Copied</div>
+    <div class="angle-badge" id="angleBadge" hidden>Rad</div>
+    <div class="clip-menu" id="clipMenu" role="menu" hidden><button id="clipCopy" role="menuitem">Copy</button><button id="clipPaste" role="menuitem">Paste</button></div>
 
     <div class="history-panel" id="historyPanel">
       <h3>History <span class="clear" id="clearHistory">Clear</span></h3>
@@ -211,19 +222,42 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     </div>
   </div>
 
-  <!-- Scientific keys sit above the standard keypad, as on iPhone -->
+  <!-- Scientific keys (same set as the iPhone Calculator) sit above the standard keypad -->
   <div class="pad sci" id="padSci" hidden>
-    <button class="key k-sci" data-act="fn" data-val="sin">sin</button>
-    <button class="key k-sci" data-act="fn" data-val="cos">cos</button>
-    <button class="key k-sci" data-act="fn" data-val="tan">tan</button>
-    <button class="key k-sci" data-act="fn" data-val="ln">ln</button>
-    <button class="key k-sci" data-act="fn" data-val="log">log<sub style="font-size:.6em">10</sub></button>
+    <button class="key k-sci" data-act="open" aria-label="Open bracket">(</button>
+    <button class="key k-sci" data-act="close" aria-label="Close bracket">)</button>
+    <button class="key k-sci" data-act="mem" data-val="mc" aria-label="Memory clear">mc</button>
+    <button class="key k-sci" data-act="mem" data-val="m+" aria-label="Memory add">m+</button>
+    <button class="key k-sci" data-act="mem" data-val="m-" aria-label="Memory subtract">m&minus;</button>
+    <button class="key k-sci" data-act="mem" data-val="mr" id="memRecall" aria-label="Memory recall">mr</button>
 
-    <button class="key k-sci" data-act="fn" data-val="sqrt" aria-label="Square root">&radic;x</button>
+    <button class="key k-sci" data-act="second" id="secondKey" aria-label="Second functions">2<sup>nd</sup></button>
+    <button class="key k-sci" data-act="unary" data-val="sq" aria-label="Square">x<sup>2</sup></button>
+    <button class="key k-sci" data-act="unary" data-val="cube" aria-label="Cube">x<sup>3</sup></button>
     <button class="key k-sci k-sci-op" data-act="op" data-val="^" aria-label="Power">x<sup>y</sup></button>
-    <button class="key k-sci" data-act="const" data-val="pi">&pi;</button>
+    <button class="key k-sci" data-act="unary" data-val="exp" aria-label="e to the x">e<sup>x</sup></button>
+    <button class="key k-sci" data-act="unary" data-val="pow10" data-alt="pow2" data-alt-label="2<sup>x</sup>" aria-label="10 to the x">10<sup>x</sup></button>
+
+    <button class="key k-sci" data-act="unary" data-val="inv" aria-label="Reciprocal"><sup>1</sup>&frasl;<sub>x</sub></button>
+    <button class="key k-sci" data-act="unary" data-val="sqrt" aria-label="Square root"><sup>2</sup>&radic;x</button>
+    <button class="key k-sci" data-act="unary" data-val="cbrt" aria-label="Cube root"><sup>3</sup>&radic;x</button>
+    <button class="key k-sci k-sci-op" data-act="op" data-val="&radic;" aria-label="Y root of x"><sup>y</sup>&radic;x</button>
+    <button class="key k-sci" data-act="unary" data-val="ln" aria-label="Natural log">ln</button>
+    <button class="key k-sci" data-act="unary" data-val="log" data-alt="log2" data-alt-label="log<sub>2</sub>" aria-label="Log base 10">log<sub>10</sub></button>
+
+    <button class="key k-sci" data-act="unary" data-val="fact" aria-label="Factorial">x!</button>
+    <button class="key k-sci" data-act="unary" data-val="sin" data-alt="asin" data-alt-label="sin<sup>&minus;1</sup>">sin</button>
+    <button class="key k-sci" data-act="unary" data-val="cos" data-alt="acos" data-alt-label="cos<sup>&minus;1</sup>">cos</button>
+    <button class="key k-sci" data-act="unary" data-val="tan" data-alt="atan" data-alt-label="tan<sup>&minus;1</sup>">tan</button>
     <button class="key k-sci" data-act="const" data-val="e">e</button>
-    <button class="key k-sci" data-act="paren" data-val="(" aria-label="Brackets">( )</button>
+    <button class="key k-sci" data-act="ee" aria-label="Exponent">EE</button>
+
+    <button class="key k-sci" data-act="angle" id="angleKey" aria-label="Switch to radians">Rad</button>
+    <button class="key k-sci" data-act="unary" data-val="sinh" data-alt="asinh" data-alt-label="sinh<sup>&minus;1</sup>">sinh</button>
+    <button class="key k-sci" data-act="unary" data-val="cosh" data-alt="acosh" data-alt-label="cosh<sup>&minus;1</sup>">cosh</button>
+    <button class="key k-sci" data-act="unary" data-val="tanh" data-alt="atanh" data-alt-label="tanh<sup>&minus;1</sup>">tanh</button>
+    <button class="key k-sci" data-act="const" data-val="pi">&pi;</button>
+    <button class="key k-sci" data-act="const" data-val="rand" aria-label="Random number">Rand</button>
   </div>
 
   <div class="pad basic" id="padBasic">
@@ -315,10 +349,11 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   var carry = null;
   var pendingFn = null;      // function pressed right after a result: typing a number replaces the result          // { text, value }: the full-precision number behind a displayed result
 
-  var OPERATORS = '÷×−+^';
+  var OPERATORS = '÷×−+^√';   // √ here is the binary ʸ√x key; square root is stored as sqrt(
   function isOperator(c){ return !!c && c.length === 1 && OPERATORS.indexOf(c) >= 0; }
   var MINUS = '−';
-  var FN_RE = /(sin|cos|tan|ln|log|sqrt)\($/;
+  var FN_NAMES = 'asinh|acosh|atanh|asin|acos|atan|sinh|cosh|tanh|sin|cos|tan|log2|ln|log|sqrt|cbrt';
+  var FN_RE = new RegExp('(' + FN_NAMES + ')\\($');
 
   function loadHistory(){
     try{
@@ -356,9 +391,11 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   }
 
   // Thousands separators on integer parts, √ for sqrt — display only.
+  var FN_LABELS = { sqrt:'√', cbrt:'∛', asin:'sin⁻¹', acos:'cos⁻¹', atan:'tan⁻¹', asinh:'sinh⁻¹', acosh:'cosh⁻¹', atanh:'tanh⁻¹', log:'log₁₀', log2:'log₂' };
   function prettify(expr){
     return String(expr)
-      .replace(/sqrt\(/g, '√(')
+      .replace(/√/g, 'ʸ√')
+      .replace(new RegExp('(' + FN_NAMES + ')\\(', 'g'), function(m, f){ return (FN_LABELS[f] || f) + '('; })
       .replace(/(\d+)(\.\d*)?/g, function(m, int, frac, offset, whole){
         if (whole.charAt(offset - 1) === 'E' || whole.charAt(offset - 2) === 'E') return m;  // exponent digits
         return int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (frac || '');
@@ -373,7 +410,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     while (i < s.length) {
       var c = s.charAt(i), rest = s.slice(i);
       // A carried-over result keeps its full precision (the display shows it rounded).
-      if (carry && (i === 0 || s.charAt(i - 1) === '(') && rest.indexOf(carry.text) === 0 && !/^[0-9.E]/.test(rest.slice(carry.text.length))) {
+      if (carry && !/[0-9.E]/.test(s.charAt(i - 1)) && rest.indexOf(carry.text) === 0 && !/^[0-9.E]/.test(rest.slice(carry.text.length))) {
         t.push({ k:'num', v: carry.value }); i += carry.text.length; continue;
       }
       if ((m = rest.match(/^(\d+\.?\d*|\.\d+)(E[+−-]?\d+)?/))) {
@@ -382,7 +419,9 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
       if (c === '.') throw new Error('bad number');
       if (c === 'π') { t.push({ k:'num', v: Math.PI }); i++; continue; }
       if (c === 'e') { t.push({ k:'num', v: Math.E }); i++; continue; }
-      if ((m = rest.match(/^(sin|cos|tan|ln|log|sqrt)(?=\()/))) { t.push({ k:'fn', v: m[1] }); i += m[1].length; continue; }
+      if ((m = rest.match(new RegExp('^(' + FN_NAMES + ')(?=\\()')))) { t.push({ k:'fn', v: m[1] }); i += m[1].length; continue; }
+      if (c === '√') { t.push({ k:'op', v:'root' }); i++; continue; }
+      if (c === '!') { t.push({ k:'!' }); i++; continue; }
       if (c === '+' ) { t.push({ k:'op', v:'+' }); i++; continue; }
       if (c === MINUS || c === '-') {
         // A minus where a value is expected, directly before a number, is part of that number
@@ -403,12 +442,39 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     return t;
   }
 
-  var FNS = { sin: Math.sin, cos: Math.cos, tan: Math.tan, ln: Math.log, log: Math.log10, sqrt: Math.sqrt };
+  // Trig follows the Deg/Rad setting; inverse trig answers in the same unit.
+  function makeFns(){
+    var k = angleMode === 'deg' ? Math.PI / 180 : 1;
+    var trig = function(f){ return function(x){ var r = f(x * k); return Math.abs(r) < 1e-12 ? 0 : r; }; };
+    var tanF = function(x){ var d = angleMode === 'deg' ? x : x * 180 / Math.PI; if (Math.abs(((d % 180) + 180) % 180 - 90) < 1e-9) return NaN; return trig(Math.tan)(x); };
+    var inv = function(f){ return function(x){ return f(x) / k; }; };
+    return { sin: trig(Math.sin), cos: trig(Math.cos), tan: tanF, asin: inv(Math.asin), acos: inv(Math.acos), atan: inv(Math.atan),
+      sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh, asinh: Math.asinh, acosh: Math.acosh, atanh: Math.atanh,
+      ln: Math.log, log: Math.log10, log2: Math.log2, sqrt: Math.sqrt, cbrt: Math.cbrt };
+  }
+  // n! for whole numbers, Γ(n+1) otherwise (as iPhone does).
+  function factorial(n){
+    if (n < 0 && Number.isInteger(n)) return NaN;
+    if (Number.isInteger(n)) { if (n > 170) return Infinity; var r = 1; for (var i = 2; i <= n; i++) r *= i; return r; }
+    return gamma(n + 1);
+  }
+  function gamma(z){
+    if (z < 0.5) return Math.PI / (Math.sin(Math.PI * z) * gamma(1 - z));
+    var g = 7, c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+      12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    z -= 1; var x = c[0]; for (var i = 1; i < g + 2; i++) x += c[i] / (z + i);
+    var t = z + g + 0.5;
+    return Math.sqrt(2 * Math.PI) * Math.pow(t, z + 0.5) * Math.exp(-t) * x;
+  }
+  function nthRoot(x, n){
+    if (x < 0 && Number.isInteger(n) && Math.abs(n % 2) === 1) return -Math.pow(-x, 1 / n);
+    return Math.pow(x, 1 / n);
+  }
 
   function evaluate(expr){
     if (!expr) return null;
     try{
-      var t = tokenize(expr), p = 0;
+      var t = tokenize(expr), p = 0, FNS = makeFns();
       var peek = function(){ return t[p]; };
       var isOp = function(v){ var x = t[p]; return x && x.k === 'op' && x.v === v; };
       var parseExpr = function(){
@@ -432,9 +498,15 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
         return parsePower();
       };
       var parsePower = function(){
-        var base = parsePrimary();
+        var base = parsePostfix();
         if (isOp('^')) { p++; return Math.pow(base, parseUnary()); }
+        if (isOp('root')) { p++; return nthRoot(base, parseUnary()); }   // x ʸ√ y = y-th root of x
         return base;
+      };
+      var parsePostfix = function(){
+        var v = parsePrimary();
+        while (t[p] && t[p].k === '!') { p++; v = factorial(v); }
+        return v;
       };
       var parsePrimary = function(){
         var x = t[p++];
@@ -446,7 +518,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
           else if (t[p]) throw new Error('expected )');
           return v;
         }
-        if (x.k === 'fn') return FNS[x.v](parsePrimary());
+        if (x.k === 'fn') return FNS[x.v](parsePostfix());
         throw new Error('unexpected ' + x.k);
       };
       var val = parseExpr();
@@ -471,7 +543,10 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   }
   function fitResult(){
     var key = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--key')) || 76;
-    fitText(resultEl, Math.round(Math.min(96, key * 1.12)));
+    // Also fit the height left in the display (it is short in Scientific on small phones).
+    var room = displayPanel.clientHeight - exprEl.offsetHeight - 12;
+    var max = Math.min(96, key * 1.12, room > 0 ? room / 1.08 : 96);
+    fitText(resultEl, Math.round(Math.max(28, max)));
   }
 
   function updateDisplay(){
@@ -494,8 +569,8 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
 
   function lastChar(){ return display.slice(-1); }
   // True when the display ends with something a number could follow by implicit ×.
-  function endsWithValue(){ return /[0-9.)πe]$/.test(display); }
-  function endsWithClosedValue(){ return /[)πe]$/.test(display); }
+  function endsWithValue(){ return /[0-9.)πe!]$/.test(display); }
+  function endsWithClosedValue(){ return /[)πe!]$/.test(display); }
 
   // Called before any input: a result is either continued (operators) or replaced (new numbers).
   function beginInput(keepResult){
@@ -515,7 +590,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   // ---------- Keys ----------
   // After "result, √", typing a number means √ of that new number, not of the result.
   function takePendingFn(){
-    if (pendingFn) { display = pendingFn + '('; pendingFn = null; carry = null; }
+    if (pendingFn !== null) { display = pendingFn; pendingFn = null; carry = null; }
   }
 
   function handleDigit(d){
@@ -544,6 +619,8 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     pendingFn = null;
     beginInput(true);
     var last = lastChar();
+    if (last === 'E') { if (sym === MINUS) { display += MINUS; updateDisplay(); } return; }
+    if (last === MINUS && display.slice(-2, -1) === 'E') return;
     if (!display || last === '(') {
       if (sym === MINUS) display += MINUS;          // unary minus
       updateDisplay();
@@ -595,44 +672,148 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     else openParen();
   }
 
-  function handleFn(name){
-    if (justEvaluated) {                            // apply to the result: 16 = √ → √(16
+  function handleFn(name){ handleUnary(name); }
+
+  // ---------- Scientific keys (iPhone set) ----------
+  // Function keys act on the number on screen (iPhone behaviour): 9 √x → √(9).
+  // With nothing to act on, they start the function so you can type into it: √x 9 → √(9.
+  var UNARY = {
+    sq:    { wrap: function(t){ return t + '^2'; } },
+    cube:  { wrap: function(t){ return t + '^3'; } },
+    inv:   { wrap: function(t){ return '(1÷' + t + ')'; } },
+    fact:  { wrap: function(t){ return t + '!'; } },
+    exp:   { wrap: function(t){ return 'e^(' + t + ')'; }, prefix: 'e^(' },
+    pow10: { wrap: function(t){ return '10^(' + t + ')'; }, prefix: '10^(' },
+    pow2:  { wrap: function(t){ return '2^(' + t + ')'; }, prefix: '2^(' }
+  };
+  function unarySpec(name){
+    if (UNARY[name]) return UNARY[name];
+    return { wrap: function(t){ return name + '(' + t + ')'; }, prefix: name + '(' };   // sin, ln, sqrt…
+  }
+
+  function handleUnary(name){
+    var spec = unarySpec(name);
+    if (justEvaluated) {                              // apply to the result; typing a number instead starts fresh
       var res = display, keep = carry;
       beginInput(false);
       carry = keep;
-      display = name + '(' + res;
-      pendingFn = name;
+      display = spec.wrap(res);
+      pendingFn = spec.prefix || '';
       updateDisplay();
       return;
     }
     pendingFn = null;
-    beginInput(false);
-    if (endsWithValue()) display += '×';
-    display += name + '(';
+    var start = /[0-9.)πe!]$/.test(display) ? trailingOperandStart() : -1;
+    if (start < 0) {
+      if (!spec.prefix) return;                       // x², 1/x, x! need a number first
+      if (endsWithValue()) display += '×';
+      display += spec.prefix;
+      updateDisplay();
+      return;
+    }
+    var head = display.slice(0, start), operand = display.slice(start);
+    if (head === MINUS) { head = ''; operand = MINUS + operand; }  // −5 √x is √(−5), as on iPhone
+    display = head + spec.wrap(operand);
     updateDisplay();
+  }
+
+  function handleEE(){
+    takePendingFn();
+    if (justEvaluated) { beginInput(true); }
+    var seg = currentNumber();
+    if (!/\d/.test(seg) || /E/.test(seg) || !/[0-9.]$/.test(display)) return;
+    display += 'E';
+    updateDisplay();
+  }
+
+  // Memory: mc clears, m+ / m− add or subtract the number on screen, mr recalls it.
+  var memory = 0;
+  try { memory = parseFloat(localStorage.getItem('calc_memory_v1')) || 0; } catch (e) {}
+  function screenValue(){
+    if (justEvaluated) return carry && carry.text === display ? carry.value : parseDisplayNum(display);
+    var expr = display;
+    while (expr && (isOperator(expr.slice(-1)) || /[(E]$/.test(expr))) expr = expr.slice(0, -1);
+    return expr ? evaluate(expr) : 0;
+  }
+  function handleMemory(op){
+    pendingFn = null;
+    if (op === 'mc') memory = 0;
+    else if (op === 'm+' || op === 'm-') {
+      var v = screenValue();
+      if (v === null || isNaN(v)) return;
+      memory += op === 'm+' ? v : -v;
+      if (Math.abs(memory) < 1e-14) memory = 0;
+      // Like iPhone, the number is now "entered": the next digit starts a new number.
+      completedExpr = justEvaluated ? completedExpr : '';
+      display = fmtNum(v); carry = { text: display, value: v };
+      justEvaluated = true; resetRepeat(); updateDisplay();
+      showToast((op === 'm+' ? 'Added to' : 'Subtracted from') + ' memory');
+    } else if (op === 'mr') {
+      beginInput(false);
+      if (endsWithValue()) display += '×';
+      display += operandText(memory);
+      updateDisplay();
+    }
+    try { localStorage.setItem('calc_memory_v1', String(memory)); } catch (e) {}
+    updateMemoryKey();
+  }
+  function updateMemoryKey(){
+    var mr = document.getElementById('memRecall');
+    if (mr) mr.classList.toggle('mem-on', memory !== 0);
+  }
+
+  // Degrees by default, like iPhone. The key shows the mode you can switch to.
+  var angleMode = 'deg';
+  try { angleMode = localStorage.getItem('calc_angle_v1') === 'rad' ? 'rad' : 'deg'; } catch (e) {}
+  function updateAngleKey(){
+    var k = document.getElementById('angleKey'), badge = document.getElementById('angleBadge');
+    if (k) { k.textContent = angleMode === 'deg' ? 'Rad' : 'Deg'; k.setAttribute('aria-label', angleMode === 'deg' ? 'Switch to radians' : 'Switch to degrees'); }
+    if (badge) badge.hidden = !(angleMode === 'rad' && currentMode === 'sci');
+  }
+  function toggleAngle(){
+    angleMode = angleMode === 'deg' ? 'rad' : 'deg';
+    try { localStorage.setItem('calc_angle_v1', angleMode); } catch (e) {}
+    updateAngleKey();
+  }
+
+  // 2nd swaps 10ˣ→2ˣ, log₁₀→log₂ and the trig keys for their inverses.
+  var secondOn = false;
+  function toggleSecond(){
+    secondOn = !secondOn;
+    document.getElementById('secondKey').classList.toggle('second-on', secondOn);
+    document.querySelectorAll('#padSci .key[data-alt]').forEach(function(k){
+      if (!k.hasAttribute('data-main')) { k.setAttribute('data-main', k.getAttribute('data-val')); k.setAttribute('data-main-label', k.innerHTML); }
+      k.setAttribute('data-val', secondOn ? k.getAttribute('data-alt') : k.getAttribute('data-main'));
+      k.innerHTML = secondOn ? k.getAttribute('data-alt-label') : k.getAttribute('data-main-label');
+    });
   }
 
   function handleConst(name){
     takePendingFn();
     beginInput(false);
     if (endsWithValue()) display += '×';
-    display += name === 'pi' ? 'π' : 'e';
+    display += name === 'pi' ? 'π' : name === 'rand' ? fmtNum(Math.random()) : 'e';
     updateDisplay();
   }
 
   // Index where the trailing operand starts (number, constant, (−n) or a bracketed group), or -1.
   function trailingOperandStart(){
     if (!display) return -1;
+    if (lastChar() === '!') {                        // 5! → the operand is 5!
+      var saved = display; display = display.replace(/!+$/, '');
+      var st = trailingOperandStart(); display = saved; return st;
+    }
     if (lastChar() === ')') {
       var depth = 0;
       for (var i = display.length - 1; i >= 0; i--) {
         var ch = display.charAt(i);
         if (ch === ')') depth++;
-        else if (ch === '(') { depth--; if (depth === 0) { var f = display.slice(0, i).match(/(sin|cos|tan|ln|log|sqrt)$/); return f ? i - f[1].length : i; } }
+        else if (ch === '(') { depth--; if (depth === 0) { var f = display.slice(0, i).match(new RegExp('(' + FN_NAMES + '|e\\^|10\\^|2\\^)$')); return f ? i - f[1].length : i; } }
       }
       return -1;
     }
     var m = display.match(/(\d*\.?\d+\.?(?:E[+−]?\d+)?|[πe])$/);
+    if (m && /E[+−]?\d+$/.test(m[1]) === false && /E[+−]?$/.test(display)) return -1;
     return m ? display.length - m[1].length : -1;
   }
 
@@ -674,7 +855,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
       if (ch === ')') { depth++; continue; }
       if (ch === '(') { depth--; continue; }
       if (depth !== 0 || !isOperator(ch)) continue;
-      if (!/[0-9.)πe]/.test(expr.charAt(i - 1))) continue;
+      if (!/[0-9.)πe!]/.test(expr.charAt(i - 1))) continue;
       var left = expr.slice(0, i), right = expr.slice(i + 1);
       if (left && right) return { left:left, op:ch, right:right };
     }
@@ -758,7 +939,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     }
     if (!display) return;
     var expr = display;
-    while (expr && (isOperator(expr.slice(-1)) || expr.slice(-1) === '(')) expr = expr.slice(0, -1);  // ignore a dangling operator
+    while (expr && (isOperator(expr.slice(-1)) || /[(E]$/.test(expr))) expr = expr.slice(0, -1);  // ignore a dangling operator / exponent
     if (!expr) return;
     var val = evaluate(expr);
     if (val === null) { showError(expr); return; }
@@ -845,8 +1026,15 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
         case 'op': handleOp(val); break;
         case 'decimal': handleDecimal(); break;
         case 'fn': handleFn(val); break;
+        case 'unary': handleUnary(val); break;
         case 'const': handleConst(val); break;
         case 'paren': handleParen(); break;
+        case 'open': pendingFn = null; openParen(); break;
+        case 'close': pendingFn = null; closeParen(); break;
+        case 'mem': handleMemory(val); break;
+        case 'ee': handleEE(); break;
+        case 'angle': toggleAngle(); break;
+        case 'second': toggleSecond(); break;
         case 'sign': handleSign(); break;
         case 'percent': handlePercent(); break;
         case 'back': handleBack(); break;
@@ -888,6 +1076,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     modeTitle.textContent = calc ? '' : 'Convert';
     try { localStorage.setItem('calc_mode_v5', mode); } catch (e) {}
     closeMenu();
+    if (typeof updateAngleKey === 'function') updateAngleKey();
     layout();
     if (!calc) updateConversion();               // re-fit the result now the panel has a width
   }
@@ -919,17 +1108,21 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     var height = app.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - document.querySelector('.topbar').offsetHeight;
     var gap = Math.round(Math.max(10, Math.min(16, width * 0.035)));
     var sci = currentMode === 'sci';
-    var gaps = 5 + (sci ? 2 * 0.7 : 0);              // basic pad has a top gap
-    var tight = height < 470;                        // e.g. iPhone SE in Safari
-    var minDisplay = sci ? (tight ? 70 : 84) : 112;
-    var sciMin = tight ? 34 : 40;                    // scientific rows: 56% of a key, never below a comfortable tap target
+    var sgap = Math.round(gap * 0.55);
+    var tight = height < 520;                        // e.g. iPhone SE in Safari
+    var minDisplay = sci ? (tight ? 56 : 80) : 112;
+    var sciRows = sci ? 5 : 0, sciMin = tight ? 27 : 36, sciMax = 46;
     var byWidth = (width - 3 * gap) / 4;
-    var key = Math.min(byWidth, (height - minDisplay - gaps * gap) / (5 + (sci ? 2 * 0.56 : 0)), 92);
-    if (sci && key * 0.56 < sciMin) key = Math.min(byWidth, (height - minDisplay - gaps * gap - 2 * sciMin) / 5, 92);
-    key = Math.floor(Math.max(36, key));
+    // Basic keys get what is left once the scientific rows (half a key, never below a tap-able size) are placed.
+    var avail = height - minDisplay - 5 * gap - (sci ? sciRows * sgap : 0);
+    var key = Math.min(byWidth, avail / (5 + sciRows * 0.5), 92);
+    var sciRow = Math.min(sciMax, Math.max(sciMin, key * 0.5));
+    if (sci) key = Math.min(byWidth, (avail - sciRows * sciRow) / 5, 92);
+    key = Math.floor(Math.max(tight && sci ? 30 : 34, key));
     root.style.setProperty('--key', key + 'px');
-    root.style.setProperty('--sci-row', Math.round(Math.max(sciMin, key * 0.56)) + 'px');
     root.style.setProperty('--gap', gap + 'px');
+    root.style.setProperty('--sci-row', Math.floor(sciRow) + 'px');
+    root.style.setProperty('--sgap', sgap + 'px');
     fitResult();
   }
   window.addEventListener('resize', layout);
@@ -950,6 +1143,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     if (k === '(') { openParen(); return; }
     if (k === ')') { closeParen(); return; }
     if (k === '%') { handlePercent(); return; }
+    if (k === '!') { handleUnary('fact'); return; }
     if (k === 'Enter' || k === '=') { e.preventDefault(); handleEquals(); return; }
     if (k === 'Backspace') { handleBack(); return; }
     if (k === 'Escape' || k === 'Delete') { handleClear(); return; }
@@ -1010,8 +1204,46 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     el.addEventListener('mouseleave',cancel);
   }
 
-  bindLongPressCopy(resultEl,function(){
-    return resultEl.textContent;
+  // Long-press the number for Copy / Paste, as on iPhone.
+  var clipMenu = document.getElementById('clipMenu');
+  function showClipMenu(){
+    var panel = displayPanel.getBoundingClientRect(), r = resultEl.getBoundingClientRect();
+    clipMenu.hidden = false;
+    clipMenu.style.top = Math.max(0, r.top - panel.top - clipMenu.offsetHeight - 6) + 'px';
+    clipMenu.style.left = Math.max(8, panel.width - clipMenu.offsetWidth - 16) + 'px';
+  }
+  (function(){
+    var timer;
+    function start(){ timer = setTimeout(showClipMenu, 480); }
+    function cancel(){ clearTimeout(timer); }
+    resultEl.addEventListener('touchstart', start, { passive:true });
+    resultEl.addEventListener('touchend', cancel);
+    resultEl.addEventListener('touchmove', cancel);
+    resultEl.addEventListener('mousedown', start);
+    resultEl.addEventListener('mouseup', cancel);
+    resultEl.addEventListener('mouseleave', cancel);
+    resultEl.addEventListener('contextmenu', function(e){ e.preventDefault(); showClipMenu(); });
+  })();
+  document.addEventListener('click', function(e){ if (!clipMenu.hidden && !clipMenu.contains(e.target)) clipMenu.hidden = true; });
+  document.getElementById('clipCopy').addEventListener('click', function(){
+    var v = screenValue();
+    copyText(v === null || isNaN(v) ? resultEl.textContent : String(Number(v.toPrecision(15))));
+    clipMenu.hidden = true;
+  });
+  function pasteNumber(text){
+    var num = parseFloat(String(text).replace(/[,$\s]/g, '').replace(/\u2212/g, '-'));
+    if (isNaN(num)) { showToast('No number to paste'); return; }
+    takePendingFn();
+    beginInput(false);
+    if (endsWithValue()) display += '×';
+    display += operandText(num);
+    updateDisplay();
+  }
+  document.getElementById('clipPaste').addEventListener('click', function(){
+    clipMenu.hidden = true;
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(pasteNumber).catch(function(){ pasteTarget = 'calc'; pasteOverlay.classList.add('open'); pasteInput.value = ''; pasteInput.focus(); });
+    } else { pasteTarget = 'calc'; pasteOverlay.classList.add('open'); pasteInput.value = ''; pasteInput.focus(); }
   });
 
   var pasteTarget='calc';
@@ -1034,11 +1266,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
         convValueInput.value=num.toString();
         updateConversion();
       }else{
-        display=fmtNum(num);
-        completedExpr='';
-        justEvaluated=false;
-        resetRepeat();
-        updateDisplay();
+        pasteNumber(num);
       }
 
       pasteOverlay.classList.remove('open');
@@ -1228,6 +1456,8 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   loadHistory();
   var savedMode = 'basic';
   try { savedMode = localStorage.getItem('calc_mode_v5') || 'basic'; } catch (e) {}
+  updateMemoryKey();
+  updateAngleKey();
   setMode(/^(basic|sci|convert)$/.test(savedMode) ? savedMode : 'basic');
   updateDisplay();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
