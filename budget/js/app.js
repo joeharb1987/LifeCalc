@@ -29,11 +29,11 @@
   }
   function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
   function cat(id) { return HF.catById(S, id); }
-  // Section header: title (+ optional total) with Edit/Done for reorder mode and + Add on the right.
+  // Section header: title (+ optional total) with + Add on the right. Rows drag by their grips at any time.
   function secHead(title, key, opts) {
     opts = opts || {};
     return '<div class="section-head"><h2>' + title + (opts.total ? ' <span class="sec-total num">' + opts.total + '</span>' : '') + '</h2><div class="sec-acts">' +
-      (key ? '<button class="link" data-act="reorder" data-val="' + key + '">' + (ui.edit[key] ? 'Done' : 'Edit') + '</button>' : '') + (opts.add || '') + '</div></div>';
+      (opts.add || '') + '</div></div>';
   }
   function secOpen(key, cls) { return '<section class="section' + (cls ? ' ' + cls : '') + (ui.edit[key] ? ' reorder' : '') + '">'; }
   function addBtn(attrs) { return '<button class="link" ' + attrs + '>' + icon('plus', 16) + ' Add</button>'; }
