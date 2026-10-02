@@ -7,7 +7,7 @@
   var ui = {
     page: null,               // sub-page over a tab: { name: 'category'|'networth'|'reports', id, from }
     open: {}, ovOpen: {}, ovMode: 'amount', actualOffset: 0,
-    txView: 'monthly', txOffset: 0, txFilter: 'all', txSearch: '',
+    stack: [], txView: 'monthly', txOffset: 0, txFilter: 'all', txSearch: '',
     histView: 'monthly', catTab: 'items', nwRange: '6M', debtTab: 'active', importRows: null
   };
   var $app = document.getElementById('app');
@@ -76,14 +76,14 @@
 
   // ---------- Render ----------
   var TABS = ['budget', 'transactions', 'debts', 'more'];
-  var PAGE_TAB = { category: 'budget', networth: 'more', reports: 'more' };
+  var PAGE_TAB = { category: 'budget', networth: 'budget', assets: 'budget', debts: 'budget', reports: 'more' };
   function render() {
     var th = S.settings.theme || 'auto';
     if (th === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', th);
     var tab = TABS.indexOf(S.settings.tab) >= 0 ? S.settings.tab : 'budget';
     var html;
-    if (ui.page) html = { category: renderCategory, networth: renderNetWorth, reports: renderReports }[ui.page.name]();
+    if (ui.page) html = { category: renderCategory, networth: renderNetWorth, assets: renderAssets, debts: renderDebts, reports: renderReports }[ui.page.name]();
     else html = { budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab]();
     $app.innerHTML = html;
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
@@ -112,7 +112,11 @@
     if (m && !m.contains(e.target) && !e.target.closest('[data-act="app-menu"]')) closeAppMenu();
   }, true);
 
-  function go(page) { page.from = ui.page ? ui.page.from : (S.settings.tab || 'budget'); ui.page = page; render(); window.scrollTo(0, 0); }
+  function go(page) {
+    page.from = ui.page ? ui.page.from : (S.settings.tab || 'budget');
+    if (ui.page) ui.stack.push(ui.page);
+    ui.page = page; render(); window.scrollTo(0, 0);
+  }
 
   // ===================== SHARED SUMMARY =====================
   function greeting() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
@@ -132,21 +136,15 @@
 
     var sum = HF.budgetSummary(S, s.view), w = VIEW_WORD[s.view];
     h += statTrio(sum.income, sum.expenses, sum.available, w);
-    var t = sum.byType;
-    h += '<div class="card pad mt12"><div class="split" style="margin:0;padding:0;border:0">' + [['Lifestyle', t.living], ['Debt', t.debt], ['Tax & gov', t.tax], ['Savings', t.savings]].map(function (p) {
-      return '<div><small>' + p[0] + '</small><b class="num">' + money(p[1], { dp: 0 }) + '</b></div>';
-    }).join('') + '</div><div class="kv mt12" style="border-top:1px solid var(--line)"><span>Fixed recurring</span><b class="num">' + money(sum.fixed) + '</b></div>' +
-      '<div class="kv"><span>Statement averages</span><b class="num">' + money(sum.variable) + '</b></div></div>';
     // Assets, debts and net worth — one combined picture, each tile opens its detail.
     var nw = HF.netWorth(S);
     h += '<div class="stats mt12">' +
-      '<button class="stat" data-act="page" data-val="networth" data-open="assets"><div class="lbl">Assets</div><div class="val num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts</div></button>' +
-      '<button class="stat" data-act="tab" data-val="debts"><div class="lbl">Debts</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' need balance' : 'all debts') + '</div></button>' +
+      '<button class="stat" data-act="page" data-val="assets"><div class="lbl">Assets</div><div class="val num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts</div></button>' +
+      '<button class="stat" data-act="page" data-val="debts"><div class="lbl">Debts</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' need balance' : 'all debts') + '</div></button>' +
       '<button class="stat" data-act="page" data-val="networth"><div class="lbl">Net worth</div><div class="val num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div><div class="per">assets − debts</div></button></div>';
 
     h += '<section class="section"><div class="section-head"><h2>Expenses</h2><button class="link" data-act="add-item" data-dir="out">' + icon('plus', 16) + ' Add</button></div>';
-    h += '<div style="margin-bottom:10px">' + seg('expView', [['categories', 'Categories'], ['all', 'All']], s.expView, 'sm') + '</div>';
-    h += s.expView === 'all' ? renderAllExpenses() : renderCategoryList(sum);
+    h += renderCategoryList(sum);
     h += '</section>';
 
     var incomes = S.items.filter(function (i) { return i.direction === 'in'; });
@@ -196,16 +194,6 @@
       '<div class="main" data-act="edit-item" data-id="' + it.id + '" style="cursor:pointer"><div class="name">' + esc(it.name) + '</div><div class="sub">' + bits.join('') + '</div></div>' +
       '<div class="amt num ' + (it.direction === 'in' && !reason ? 'pos' : '') + '">' + (Number(it.amount) ? money(v) : '—') + '<small>' + (isOne ? 'once' : VIEW_SHORT[view]) + '</small></div>' +
       miniBtns('item', it.id) + '</div>';
-  }
-
-  function renderAllExpenses() {
-    var items = S.items.filter(function (i) { return i.direction === 'out'; });
-    if (!items.length) return '<div class="card">' + emptyBlock('tag', 'No expenses yet', 'Add your first expense.') + '</div>';
-    items.sort(function (a, b) {
-      var ra = HF.excludedReason(S, a) ? 1 : 0, rb = HF.excludedReason(S, b) ? 1 : 0;
-      return ra !== rb ? ra - rb : conv(b) - conv(a);
-    });
-    return '<div class="list">' + items.map(function (it) { return itemRow(it, true); }).join('') + '</div>';
   }
 
   // ---------- Actual mode ----------
@@ -522,7 +510,7 @@
   // ===================== DEBTS =====================
   function debtMonthly(d) { return HF.convert(d.payment, d.frequency, null, 'monthly'); }
   function renderDebts() {
-    var h = top('Debts', { actions: '<button class="icon-btn" data-act="add-debt" aria-label="Add debt">' + icon('plus', 22) + '</button>' });
+    var h = top('Debts', { back: !!ui.page, actions: '<button class="icon-btn" data-act="add-debt" aria-label="Add debt">' + icon('plus', 22) + '</button>' });
     var inScope = S.debts;
     var active = inScope.filter(function (d) { return d.active !== false; });
     var bal = 0, pay = 0, interest = 0, missing = 0;
@@ -567,7 +555,7 @@
   var ASSET_TYPES = [['cash', 'Bank / cash'], ['kids', 'Kids savings'], ['shares', 'Shares'], ['crypto', 'Crypto'], ['other', 'Other']];
   function renderNetWorth() {
     var nw = HF.netWorth(S);
-    var h = top('Net Worth', { back: true, actions: '<button class="icon-btn" data-act="add-asset" aria-label="Add asset">' + icon('plus', 22) + '</button>' });
+    var h = top('Net Worth', { back: true });
     var hist = (S.nwHistory || []).map(function (p) { return { date: p.date, value: p.all != null ? p.all : p.household }; });
     var monthAgo = HF.toISO(new Date(Date.now() - 30 * 864e5)), base = null;
     hist.forEach(function (p) { if (p.date <= monthAgo) base = p; });
@@ -579,12 +567,23 @@
     var pts = hist.filter(function (p) { return p.date >= from; }).map(function (p) { return { label: HF.fmtDate(p.date), value: p.value }; });
     h += pts.length >= 2 ? '<div class="mt12">' + lineChart('nwChart', pts) + '</div>' : '<p class="muted small" style="margin:12px 0 0">The chart builds up as you update balances — one point per day something changes.</p>';
     h += '<div class="range">' + ['1M', '3M', '6M', '1Y', 'All'].map(function (r) { return '<button class="' + (ui.nwRange === r ? 'on' : '') + '" data-act="nw-range" data-val="' + r + '">' + r + '</button>'; }).join('') + '</div></div>';
-    if (nw.missing.length) h += '<div class="note"><b>Not yet subtracted:</b> ' + nw.missing.map(function (d) { return esc(d.name); }).join(', ') + ' — no balance set, so net worth is overstated until you add them in Debts.</div>';
 
+    h += '<div class="list mt16">' +
+      '<button class="row" data-act="page" data-val="assets"><div class="ico">' + icon('bank', 20) + '</div><div class="main"><div class="name">Assets</div><div class="sub">' + S.assets.length + ' accounts &amp; holdings</div></div><div class="amt num">' + money(nw.assets, { dp: 0 }) + '</div>' + icon('chev', 18, 'chev') + '</button>' +
+      '<button class="row" data-act="page" data-val="debts"><div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">Debts</div><div class="sub">' + S.debts.filter(function (d) { return d.active !== false; }).length + ' active' + (nw.missing.length ? ' · ' + nw.missing.length + ' without balance' : '') + '</div></div><div class="amt num neg">−' + money(nw.liabilities, { dp: 0 }) + '</div>' + icon('chev', 18, 'chev') + '</button>' +
+      '<div class="row nw-total"><div class="main"><div class="name">Net worth</div><div class="sub">Assets − debts</div></div><div class="amt num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div></div></div>';
+    if (nw.missing.length) h += '<div class="note"><b>Not yet subtracted:</b> ' + nw.missing.map(function (d) { return esc(d.name); }).join(', ') + ' — no balance set yet. Tap Debts to add them.</div>';
+    return h;
+  }
+  function renderAssets() {
+    var nw = HF.netWorth(S);
+    var h = top('Assets', { back: true, actions: '<button class="icon-btn" data-act="add-asset" aria-label="Add asset">' + icon('plus', 22) + '</button>' });
+    h += '<div class="card hero"><div class="lbl">Total assets</div><div class="big num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts &amp; holdings</div></div>';
     h += '<div class="list mt16">';
     ASSET_GROUPS.forEach(function (g) {
       var list = S.assets.filter(function (a) { return g.types.indexOf(a.type) >= 0; });
-      var tot = list.reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0), key = 'nw_' + g.id, open = ui.open[key];
+      // Groups start open; tapping a header collapses it.
+      var tot = list.reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0), key = 'asx_' + g.id, open = !ui.open[key];
       var sub = g.id === 'inv' ? ['crypto', 'shares'].map(function (t) {
         var v = list.filter(function (a) { return a.type === t; }).reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0);
         return (t === 'crypto' ? 'Crypto ' : 'Shares ') + money(v, { dp: 0 });
@@ -592,13 +591,8 @@
       h += '<div class="grp"><button class="row" data-act="toggle" data-id="' + key + '"><div class="ico">' + icon(g.icon, 20) + '</div><div class="main"><div class="name">' + g.name + '</div><div class="sub">' + sub + '</div></div><div class="amt num">' + money(tot, { dp: 0 }) + '</div>' + icon(open ? 'down' : 'chev', 18, 'chev') + '</button>' +
         (open ? list.map(assetRow).join('') : '') + '</div>';
     });
-    var debts = S.debts.filter(function (d) { return d.active !== false; }), dk = 'nw_debts', dOpen = ui.open[dk];
-    h += '<div class="grp"><button class="row" data-act="toggle" data-id="' + dk + '"><div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">Debts</div><div class="sub">' + debts.length + ' debts' + (nw.missing.length ? ' · ' + nw.missing.length + ' without balance' : '') + '</div></div><div class="amt num neg">−' + money(nw.liabilities, { dp: 0 }) + '</div>' + icon(dOpen ? 'down' : 'chev', 18, 'chev') + '</button>' +
-      (dOpen ? debts.map(function (d) {
-        return '<button class="row" data-act="edit-debt" data-id="' + d.id + '" style="padding-left:66px"><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + (d.balance == null ? badge('Balance not set', 'flag') : '') + '</div></div><div class="amt num">' + (d.balance == null ? '—' : '−' + money(d.balance, { dp: 2 })) + '</div></button>';
-      }).join('') : '') + '</div>';
     h += '</div><button class="btn soft block mt12" data-act="add-asset">' + icon('plus', 18) + ' Add asset</button>';
-    h += '<p class="muted small" style="margin:10px 4px">Not part of weekly cash flow. Market values change — update them when you check.</p>';
+    h += '<p class="muted small" style="margin:10px 4px">Market values change — update them when you check.</p>';
     return h;
   }
   function assetRow(a) {
@@ -1042,9 +1036,9 @@
   function confirmDel(what) { return confirm('Delete ' + what + '? This can’t be undone.'); }
   var actions = {
     'app-menu': function (b) { if (document.getElementById('appMenu')) closeAppMenu(); else openAppMenu(b); },
-    tab: function (b, e) { e.preventDefault(); closeAppMenu(); ui.page = null; S.settings.tab = b.dataset.val; closeSheet(true); commit(); window.scrollTo(0, 0); },
-    page: function (b) { closeSheet(true); if (b.dataset.val === 'category') ui.catTab = 'items'; if (b.dataset.open === 'assets') ASSET_GROUPS.forEach(function (g) { ui.open['nw_' + g.id] = true; }); go({ name: b.dataset.val, id: b.dataset.id }); },
-    back: function () { ui.page = null; render(); window.scrollTo(0, 0); },
+    tab: function (b, e) { e.preventDefault(); closeAppMenu(); ui.page = null; ui.stack = []; S.settings.tab = b.dataset.val; closeSheet(true); commit(); window.scrollTo(0, 0); },
+    page: function (b) { closeSheet(true); if (b.dataset.val === 'category') ui.catTab = 'items'; go({ name: b.dataset.val, id: b.dataset.id }); },
+    back: function () { ui.page = ui.stack.pop() || null; render(); window.scrollTo(0, 0); },
     set: function (b) {
       var k = b.dataset.key, v = b.dataset.val;
       if (k in ui) { ui[k] = v; if (k === 'txView') ui.txOffset = 0; render(); return; }
