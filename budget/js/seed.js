@@ -276,6 +276,7 @@
       rules: rules,
       debts: debts,
       assets: assets,
+      assetCats: root.HF.defaultAssetCats(),
       nwHistory: []             // [{ date, household, all }] — one snapshot per day values change
     };
   }

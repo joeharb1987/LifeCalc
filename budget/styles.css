@@ -318,3 +318,8 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 /* Net worth calculation total */
 .nw-total { background: var(--sunken); }
 .nw-total .name, .nw-total .amt { font-size: 17px; font-weight: 800; }
+
+/* Category chips with icons (asset form) */
+.icon-choice span { display: inline-flex; align-items: center; gap: 6px; }
+.icon-choice .ic { flex: 0 0 auto; }
+#newCat[hidden] { display: none; }

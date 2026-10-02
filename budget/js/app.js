@@ -30,13 +30,13 @@
   function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
   function cat(id) { return HF.catById(S, id); }
   function grip() { return '<span class="grip" aria-label="Drag to reorder">' + icon('grip', 18) + '</span>'; }
-  // Items in a category, in the order the user dragged them into.
-  function catItems(catId) {
-    return S.items.map(function (it, i) { return { it: it, i: i }; })
-      .filter(function (x) { return x.it.direction === 'out' && x.it.categoryId === catId; })
-      .sort(function (a, b) { return (a.it.order != null ? a.it.order : 1e6 + a.i) - (b.it.order != null ? b.it.order : 1e6 + b.i); })
-      .map(function (x) { return x.it; });
+  // Sort by the order the user dragged things into (unsorted ones keep their original order, after).
+  function byOrder(list) {
+    return list.map(function (x, i) { return { x: x, i: i }; })
+      .sort(function (a, b) { return (a.x.order != null ? a.x.order : 1e6 + a.i) - (b.x.order != null ? b.x.order : 1e6 + b.i); })
+      .map(function (o) { return o.x; });
   }
+  function catItems(catId) { return byOrder(S.items.filter(function (it) { return it.direction === 'out' && it.categoryId === catId; })); }
   function sortedCats() { return S.categories.slice().sort(function (a, b) { return a.order - b.order; }); }
   function expenseCats() { return sortedCats().filter(function (c) { return c.type !== 'income' && c.type !== 'transfer' && c.type !== 'investment'; }); }
   function num(v) { var n = parseFloat(String(v).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? 0 : n; }
@@ -524,8 +524,8 @@
       '<div class="pill"><b class="num">' + money(pay, { dp: 0 }) + '</b><small>repayments / month</small></div></div>' +
       '<div class="split" style="grid-template-columns:1fr 1fr"><div><small>Est. interest / month</small><b class="num">' + money(interest, { dp: 0 }) + '</b></div><div><small>Balances not set</small><b>' + missing + '</b></div></div></div>';
     h += '<div class="mt16">' + seg('debtTab', [['active', 'Active'], ['paid', 'Paid off']], ui.debtTab, 'sm') + '</div>';
-    var list = inScope.filter(function (d) { return ui.debtTab === 'active' ? d.active !== false : d.active === false; });
-    h += list.length ? '<div class="list mt12">' + list.map(debtRow).join('') + '</div>' : '<div class="card mt12">' + emptyBlock('card', ui.debtTab === 'active' ? 'No active debts' : 'Nothing paid off yet', ui.debtTab === 'active' ? 'Add one to track it.' : 'Turn a debt off when it\'s paid and it moves here.') + '</div>';
+    var list = byOrder(inScope).filter(function (d) { return ui.debtTab === 'active' ? d.active !== false : d.active === false; });
+    h += list.length ? '<div class="list mt12" data-sort-list="debts">' + list.map(debtRow).join('') + '</div>' : '<div class="card mt12">' + emptyBlock('card', ui.debtTab === 'active' ? 'No active debts' : 'Nothing paid off yet', ui.debtTab === 'active' ? 'Add one to track it.' : 'Turn a debt off when it\'s paid and it moves here.') + '</div>';
     h += '<button class="btn soft block mt12" data-act="add-debt">' + icon('plus', 18) + ' Add debt</button>';
     h += '<div class="note">Repayments are targets. What actually left the bank is in Transactions under Debt Repayments.</div>';
     return h;
@@ -539,20 +539,19 @@
     if (payoff) bits.push('<span>' + payoff + '</span>');
     if (d.limit && bal > d.limit) bits.push('<span class="neg" style="font-weight:600">over limit by ' + money(bal - d.limit, { dp: 2 }) + '</span>');
     var util = d.limit && bal != null ? Math.min(100, bal / d.limit * 100) : null;
-    return '<button class="row" data-act="edit-debt" data-id="' + d.id + '"><div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + bits.join('<span>·</span>') + '</div>' +
+    return '<button class="row" data-act="edit-debt" data-id="' + d.id + '" data-sort-id="' + d.id + '">' + grip() + '<div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + bits.join('<span>·</span>') + '</div>' +
       (util != null ? '<div class="bar ' + (bal > d.limit ? 'over' : '') + '"><span style="width:' + util.toFixed(1) + '%"></span></div>' : '') + '</div>' +
       '<div class="amt num">' + (bal == null ? '<span class="muted" style="font-weight:600;font-size:13px">Balance not set</span>' : money(bal, { dp: 2 })) +
       '<small>' + (Number(d.payment) ? money(d.payment, { dp: 2 }) + ' / ' + ({ weekly: 'week', fortnightly: 'fortnight', monthly: 'month', quarterly: 'quarter' }[d.frequency] || d.frequency) : 'no repayment set') + '</small></div></button>';
   }
 
   // ===================== NET WORTH =====================
-  var ASSET_GROUPS = [
-    { id: 'cash', name: 'Bank accounts & cash', icon: 'bank', types: ['cash'] },
-    { id: 'kids', name: 'Kids savings', icon: 'piggy', types: ['kids'] },
-    { id: 'inv', name: 'Investments', icon: 'chart', types: ['crypto', 'shares'] },
-    { id: 'other', name: 'Other assets', icon: 'tag', types: ['other'] }
-  ];
-  var ASSET_TYPES = [['cash', 'Bank / cash'], ['kids', 'Kids savings'], ['shares', 'Shares'], ['crypto', 'Crypto'], ['other', 'Other']];
+  function assetCats() { return byOrder(S.assetCats); }
+  function assetCat(id) { return byId(S.assetCats, id) || byId(S.assetCats, 'other') || { id: 'other', name: 'Other assets', icon: 'tag' }; }
+  function assetsIn(catId) {
+    var known = S.assetCats.map(function (c) { return c.id; });
+    return byOrder(S.assets.filter(function (a) { return a.type === catId || (catId === 'other' && known.indexOf(a.type) < 0); }));
+  }
   function renderNetWorth() {
     var nw = HF.netWorth(S);
     var h = top('Net Worth', { back: true });
@@ -580,23 +579,22 @@
     var h = top('Assets', { back: true, actions: '<button class="icon-btn" data-act="add-asset" aria-label="Add asset">' + icon('plus', 22) + '</button>' });
     h += '<div class="card hero"><div class="lbl">Total assets</div><div class="big num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts &amp; holdings</div></div>';
     h += '<div class="list mt16">';
-    ASSET_GROUPS.forEach(function (g) {
-      var list = S.assets.filter(function (a) { return g.types.indexOf(a.type) >= 0; });
-      // Groups start open; tapping a header collapses it.
+    h = h.replace('<div class="list mt16">', '<div class="list mt16" data-sort-list="assetcats">');
+    assetCats().forEach(function (g) {
+      var list = assetsIn(g.id);
+      if (!list.length) return;
+      // Groups start open; tapping a header collapses it. Drag the grips to reorder.
       var tot = list.reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0), key = 'asx_' + g.id, open = !ui.open[key];
-      var sub = g.id === 'inv' ? ['crypto', 'shares'].map(function (t) {
-        var v = list.filter(function (a) { return a.type === t; }).reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0);
-        return (t === 'crypto' ? 'Crypto ' : 'Shares ') + money(v, { dp: 0 });
-      }).join(' · ') : list.length + ' item' + (list.length === 1 ? '' : 's');
-      h += '<div class="grp"><button class="row" data-act="toggle" data-id="' + key + '"><div class="ico">' + icon(g.icon, 20) + '</div><div class="main"><div class="name">' + g.name + '</div><div class="sub">' + sub + '</div></div><div class="amt num">' + money(tot, { dp: 0 }) + '</div>' + icon(open ? 'down' : 'chev', 18, 'chev') + '</button>' +
-        (open ? list.map(assetRow).join('') : '') + '</div>';
+      h += '<div class="grp' + (open ? ' open' : '') + '" data-sort-id="' + g.id + '"><div class="row cat-row" role="button" tabindex="0" data-act="toggle" data-id="' + key + '">' + grip() + '<div class="ico">' + icon(g.icon, 20) + '</div><div class="main"><div class="name">' + esc(g.name) + '</div><div class="sub">' + list.length + ' item' + (list.length === 1 ? '' : 's') + '</div></div><div class="amt num">' + money(tot, { dp: 0 }) + '</div>' + icon('chev', 18, 'chev') + '</div>' +
+        (open ? '<div class="grp-body" data-sort-list="assets:' + g.id + '">' + list.map(assetRow).join('') + '</div>' +
+          '<div class="grp-foot"><button class="link" data-act="add-asset" data-type="' + g.id + '">' + icon('plus', 16) + ' Add</button><button class="link" data-act="edit-assetcat" data-id="' + g.id + '">' + icon('edit', 14) + ' Edit category</button></div>' : '') + '</div>';
     });
     h += '</div><button class="btn soft block mt12" data-act="add-asset">' + icon('plus', 18) + ' Add asset</button>';
     h += '<p class="muted small" style="margin:10px 4px">Market values change — update them when you check.</p>';
     return h;
   }
   function assetRow(a) {
-    return '<div class="row" style="padding-left:66px"><div class="main" data-act="edit-asset" data-id="' + a.id + '" style="cursor:pointer"><div class="name">' + esc(a.name) + '</div><div class="sub">' + '' +
+    return '<div class="row" data-sort-id="' + a.id + '">' + grip() + '<div class="main" data-act="edit-asset" data-id="' + a.id + '" style="cursor:pointer"><div class="name">' + esc(a.name) + '</div><div class="sub">' + '' +
       '<span>Updated ' + (a.updated ? HF.fmtDate(a.updated, true) : '—') + '</span>' + (a.notes ? '<span>· ' + esc(a.notes) + '</span>' : '') + '</div></div><div class="amt num">' + money(a.value, { dp: 2 }) + '</div>' + miniBtns('asset', a.id) + '</div>';
   }
 
@@ -671,6 +669,30 @@
     return '<div class="choice">' + list.map(function (o) {
       return '<label><input type="radio" name="' + name + '" value="' + o[0] + '"' + (String(o[0]) === String(cur) ? ' checked' : '') + '><span>' + o[1] + '</span></label>';
     }).join('') + '</div>';
+  }
+  function iconPick(name, cur) {
+    return '<div class="icon-pick">' + HF.CATEGORY_ICONS.map(function (k) {
+      return '<label><input type="radio" name="' + name + '" value="' + k + '"' + (cur === k ? ' checked' : '') + ' aria-label="' + k + '"><span>' + icon(k, 20) + '</span></label>';
+    }).join('') + '</div>';
+  }
+  function openAssetCatForm(id) {
+    var c = byId(S.assetCats, id); if (!c) return;
+    var used = S.assets.filter(function (a) { return a.type === c.id; }).length;
+    openForm('Edit Category', '<label class="field"><span>Name</span><input name="name" required value="' + esc(c.name) + '"></label>' +
+      '<div class="field"><span>Icon</span>' + iconPick('icon', c.icon) + '</div>' +
+      '<button type="button" class="btn danger-text block" id="acDel">' + icon('trash', 18) + ' Delete category</button>' +
+      (used ? '<p class="muted small" style="text-align:center">Its ' + used + ' asset' + (used > 1 ? 's move' : ' moves') + ' to Other assets.</p>' : ''), function (form) {
+      c.name = form.name.value.trim() || c.name; c.icon = radio(form, 'icon') || c.icon;
+      closeSheet(); commit('Saved');
+    }, function (el) {
+      el.querySelector('#acDel').addEventListener('click', function () {
+        if (c.id === 'other') { toast('Other assets can’t be deleted'); return; }
+        if (!confirmDel('“' + c.name + '”')) return;
+        S.assets.forEach(function (a) { if (a.type === c.id) a.type = 'other'; });
+        S.assetCats = S.assetCats.filter(function (x) { return x.id !== c.id; });
+        closeSheet(); commit('Deleted');
+      });
+    });
   }
   function radio(form, name) { var el = form.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : null; }
   function freqOptions(cur) { return HF.FREQUENCIES.map(function (f) { return '<option value="' + f.id + '"' + (f.id === cur ? ' selected' : '') + '>' + f.label + '</option>'; }).join(''); }
@@ -797,21 +819,34 @@
     });
   }
 
-  function openAssetForm(id) {
-    var a = id ? byId(S.assets, id) : { id: null, name: '', type: 'cash', value: '', scope: 'household', updated: todayISO(), notes: '' };
+  function openAssetForm(id, type) {
+    var a = id ? byId(S.assets, id) : { id: null, name: '', type: type || 'cash', value: '', scope: 'household', updated: todayISO(), notes: '' };
+    var curType = assetCat(a.type).id;
     var b = '<label class="field"><span>Name</span><input name="name" required value="' + esc(a.name) + '"></label>' +
       '<div class="grid2"><label class="field"><span>Value</span><div class="money-input"><input name="value" inputmode="decimal" value="' + esc(a.value) + '"></div></label>' +
       '<label class="field"><span>Value as at</span><input type="date" name="updated" value="' + esc(a.updated || todayISO()) + '"></label></div>' +
-      '<div class="field"><span>Type</span>' + choice('type', ASSET_TYPES, a.type) + '</div>' +
+      '<div class="field"><span>Category</span><div class="choice icon-choice">' + assetCats().map(function (c) {
+        return '<label><input type="radio" name="type" value="' + c.id + '"' + (c.id === curType ? ' checked' : '') + '><span>' + icon(c.icon, 16) + esc(c.name) + '</span></label>';
+      }).join('') + '<label><input type="radio" name="type" value="__new"><span>' + icon('plus', 16) + 'Custom…</span></label></div></div>' +
+      '<div id="newCat" hidden><label class="field"><span>New category name</span><input name="newCatName" placeholder="e.g. Boat, Jewellery, Super fund"></label>' +
+      '<div class="field"><span>Icon</span>' + iconPick('newCatIcon', 'star') + '</div></div>' +
       '<label class="field"><span>Notes</span><textarea name="notes">' + esc(a.notes) + '</textarea></label>' +
       (a.id ? '<button type="button" class="btn danger-text block" data-act="del-asset" data-id="' + a.id + '">' + icon('trash', 18) + ' Delete asset</button>' : '');
     openForm(a.id ? 'Edit Asset' : 'Add Asset', b, function (form) {
-      var val = { name: form.name.value.trim() || 'Asset', type: radio(form, 'type'), value: Math.round(num(form.value.value) * 100) / 100, scope: a.scope || 'household', updated: form.updated.value, notes: form.notes.value.trim() };
+      var t = radio(form, 'type') || 'other';
+      if (t === '__new') {
+        var nm = form.newCatName.value.trim();
+        if (!nm) { toast('Name the new category'); return; }
+        t = HF.uid('ac');
+        S.assetCats.push({ id: t, name: nm, icon: radio(form, 'newCatIcon') || 'tag', order: S.assetCats.length });
+      }
+      var val = { name: form.name.value.trim() || 'Asset', type: t, value: Math.round(num(form.value.value) * 100) / 100, scope: a.scope || 'household', updated: form.updated.value, notes: form.notes.value.trim() };
       if (a.id) Object.assign(a, val); else S.assets.push(Object.assign({ id: HF.uid('as') }, val));
       closeSheet(); commit('Saved');
     }, function (el) {
       var f = el.querySelector('form');
       f.value.addEventListener('input', function () { f.updated.value = todayISO(); });
+      el.querySelector('.icon-choice').addEventListener('change', function () { el.querySelector('#newCat').hidden = radio(f, 'type') !== '__new'; });
     });
   }
 
@@ -1070,7 +1105,8 @@
       var d = byId(S.debts, b.dataset.id); if (!d || !confirmDel('“' + d.name + '”')) return;
       S.debts = S.debts.filter(function (x) { return x.id !== d.id; }); closeSheet(); commit('Deleted');
     },
-    'add-asset': function () { openAssetForm(null); },
+    'add-asset': function (b) { openAssetForm(null, b.dataset.type); },
+    'edit-assetcat': function (b) { openAssetCatForm(b.dataset.id); },
     'edit-asset': function (b) { openAssetForm(b.dataset.id); },
     'del-asset': function (b) {
       var a = byId(S.assets, b.dataset.id); if (!a || !confirmDel('“' + a.name + '”')) return;
@@ -1133,19 +1169,25 @@
     else if (prev && prev.hasAttribute('data-sort-id') && -dy > prev.offsetHeight / 2) { drag.list.insertBefore(el, prev); drag.y0 -= prev.offsetHeight; drag.moved = true; }
     el.style.transform = 'translateY(' + (e.clientY - drag.y0) + 'px)';
   });
+  // Only some rows may be on screen; slot the new order into their existing positions.
+  function applyOrder(all, ids, pool) {
+    var slots = [], k = 0;
+    all.forEach(function (x, i) { if (ids.indexOf(x.id) >= 0) slots.push(i); });
+    slots.forEach(function (i) { all[i] = byId(pool, ids[k++]); });
+    all.forEach(function (x, i) { x.order = i; });
+  }
   function endDrag() {
     if (!drag) return;
     var d = drag; drag = null;
     d.el.style.transform = ''; d.el.classList.remove('dragging'); d.list.classList.remove('sorting');
     if (!d.moved) return;
     var ids = Array.prototype.filter.call(d.list.children, function (x) { return x.hasAttribute('data-sort-id'); }).map(function (x) { return x.getAttribute('data-sort-id'); });
-    if (d.list.getAttribute('data-sort-list') === 'cats') {
-      // Only some categories are shown; slot the new order into their existing positions.
-      var all = sortedCats(), slots = [], k = 0;
-      all.forEach(function (c, i) { if (ids.indexOf(c.id) >= 0) slots.push(i); });
-      slots.forEach(function (i) { all[i] = cat(ids[k++]); });
-      all.forEach(function (c, i) { c.order = i; });
-    } else ids.forEach(function (id, i) { var it = byId(S.items, id); if (it) it.order = i; });
+    var kind = d.list.getAttribute('data-sort-list'), parts = kind.split(':');
+    if (kind === 'cats') applyOrder(sortedCats(), ids, S.categories);
+    else if (kind === 'assetcats') applyOrder(assetCats(), ids, S.assetCats);
+    else if (kind === 'debts') applyOrder(byOrder(S.debts), ids, S.debts);
+    else if (parts[0] === 'assets') applyOrder(assetsIn(parts[1]), ids, S.assets);
+    else if (parts[0] === 'items') applyOrder(catItems(parts[1]), ids, S.items);
     persist(); render();
   }
   document.addEventListener('pointerup', endDrag);
