@@ -1,4 +1,4 @@
-// Run: node finance/tests/core.test.js
+// Run: node budget/tests/core.test.js
 const assert = require('assert');
 require('../js/core.js'); require('../js/seed.js'); require('../js/importer.js');
 const HF = globalThis.HF, IM = HF.importer;
