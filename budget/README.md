@@ -50,4 +50,4 @@ Items outside their start/end dates aren't counted. Everything counts as househo
 
 **Debt** – `name, balance, limit, rate, payment, frequency, endDate, scope, active, notes`.
 
-**Net worth** = assets − every active debt. Debts without a balance are listed as not yet subtracted. `nwHistory` keeps one snapshot per day the value changes, for the chart.
+**Net worth** = every asset − every active debt (one combined household). Debts without a balance are listed as not yet subtracted. `nwHistory` keeps one snapshot per day the value changes, for the chart.
