@@ -5,7 +5,7 @@ const { chromium } = pw;
 const URL = process.argv[2] || 'http://localhost:8765/index.html';
 // Key names map to data-act/data-val buttons on the pads.
 const K = { '÷': ['op', '÷'], '×': ['op', '×'], '−': ['op', '−'], '+': ['op', '+'], '^': ['op', '^'], '=': ['equals'], '.': ['decimal'], 'AC': ['clear'], 'C': ['clear'],
-  '±': ['sign'], '%': ['percent'], '⌫': ['clear'], '(': ['paren'], 'π': ['const', 'pi'], 'e': ['const', 'e'], 'sin': ['fn', 'sin'], 'cos': ['fn', 'cos'], 'tan': ['fn', 'tan'],
+  '±': ['sign'], '%': ['percent'], '⌫': ['back'], '(': ['paren'], 'π': ['const', 'pi'], 'e': ['const', 'e'], 'sin': ['fn', 'sin'], 'cos': ['fn', 'cos'], 'tan': ['fn', 'tan'],
   'ln': ['fn', 'ln'], 'log': ['fn', 'log'], '√': ['fn', 'sqrt'] };
 const cases = [
   // basic arithmetic
@@ -60,7 +60,8 @@ const cases = [
   ['delete key removes last digit', '5 + 3 ⌫ 4 =', '9'],
   ['delete twice removes operator', '5 + 3 ⌫ ⌫ 7 =', '57'],
   ['delete to empty then AC', '5 ⌫ AC', '0'],
-  ['key reads AC after result', '2 + 3 = AC', '0'],
+  ['AC after result', '2 + 3 = AC', '0'],
+  ['AC mid-sum clears all', '5 + 3 AC 2 =', '2'],
   ['delete then AC', '1 2 + 3 ⌫ ⌫ ⌫ ⌫ AC', '0'],
   ['neg exponent then op swap', '2 ^ − + 3 =', '5'],
   ['sign of big result keeps precision', '9 9 9 9 9 9 9 × 9 9 9 9 9 9 9 × 9 9 9 = ± ÷ 1 0 0 0 =', '−99,899,980,020,001'],
@@ -105,7 +106,7 @@ const cases = [
   ['unary minus in paren', '( − 3 ( × 2 =', '−6'],
   ['backspace', '1 2 3 ⌫ =', '12'],
   ['backspace fn', 'sin ⌫ 5 =', '5'],
-  ['delete key after result is AC', '1 2 3 = ⌫', '0'],
+  ['delete after result edits it', '1 2 3 = ⌫', '12'],
   ['backspace to empty', '7 ⌫', '0'],
 ];
 (async () => {
