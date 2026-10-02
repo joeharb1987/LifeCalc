@@ -7,7 +7,7 @@
   var ui = {
     page: null,               // sub-page over a tab: { name: 'category'|'networth'|'reports', id, from }
     open: {}, ovOpen: {}, ovMode: 'amount', actualOffset: 0,
-    stack: [], txView: 'monthly', txOffset: 0, txFilter: 'all', txSearch: '',
+    stack: [], edit: {}, showOff: {}, txView: 'monthly', txOffset: 0, txFilter: 'all', txSearch: '',
     histView: 'monthly', catTab: 'items', nwRange: '6M', debtTab: 'active', importRows: null
   };
   var $app = document.getElementById('app');
@@ -29,6 +29,21 @@
   }
   function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
   function cat(id) { return HF.catById(S, id); }
+  // Section header: title (+ optional total) with Edit/Done for reorder mode and + Add on the right.
+  function secHead(title, key, opts) {
+    opts = opts || {};
+    return '<div class="section-head"><h2>' + title + (opts.total ? ' <span class="sec-total num">' + opts.total + '</span>' : '') + '</h2><div class="sec-acts">' +
+      (key ? '<button class="link" data-act="reorder" data-val="' + key + '">' + (ui.edit[key] ? 'Done' : 'Edit') + '</button>' : '') + (opts.add || '') + '</div></div>';
+  }
+  function secOpen(key, cls) { return '<section class="section' + (cls ? ' ' + cls : '') + (ui.edit[key] ? ' reorder' : '') + '">'; }
+  function addBtn(attrs) { return '<button class="link" ' + attrs + '>' + icon('plus', 16) + ' Add</button>'; }
+  function swipeDel(kind, id) { return '<button type="button" class="swipe-del" data-act="del-' + kind + '" data-id="' + id + '">Delete</button>'; }
+  // Cancelled = switched off, or its end date has passed. Hidden behind "Show cancelled".
+  function isCancelled(it) { return !it.active || (it.endDate && it.endDate < todayISO()); }
+  function cancelledLink(key, n) {
+    return n ? '<button class="link muted-link" data-act="show-off" data-id="' + key + '">' + (ui.showOff[key] ? 'Hide cancelled' : 'Show cancelled (' + n + ')') + '</button>' : '';
+  }
+  function visibleItems(list, key) { return ui.showOff[key] ? list : list.filter(function (it) { return !isCancelled(it); }); }
   function grip() { return '<span class="grip" aria-label="Drag to reorder">' + icon('grip', 18) + '</span>'; }
   // Sort by the order the user dragged things into (unsorted ones keep their original order, after).
   function byOrder(list) {
@@ -52,17 +67,26 @@
   var SOURCE_LABEL = { statement: 'Statement', statement_avg: 'Statement avg', cash: 'Manual cash', manual: 'Manual', imported: 'Imported', calculated: 'Calculated', assumption: 'Assumption' };
 
   function badge(text, cls) { return '<span class="badge ' + (cls || '') + '">' + esc(text) + '</span>'; }
-  function srcBadge(src) { return badge(SOURCE_LABEL[src] || src, src === 'assumption' ? 'flag' : ''); }
+  // Source badges: one pill style, colour by kind. Tap one for what it means.
+  var SOURCE_TONE = { statement: 'stmt', statement_avg: 'stmt', imported: 'stmt', calculated: 'stmt', cash: 'sand', manual: '', assumption: 'flag' };
+  var SOURCE_INFO = {
+    statement: 'Taken from your bank statements.',
+    statement_avg: AVG_LABEL + '. Your average spend from bank statements.',
+    imported: 'Imported from a bank statement.',
+    calculated: 'Worked out from other figures.',
+    cash: 'Cash you entered by hand. It isn’t in your bank statements.',
+    manual: 'A figure you entered by hand.',
+    assumption: 'An estimate. Update it when you know the real number.'
+  };
+  function srcBadge(src) {
+    return '<button type="button" class="badge ' + (SOURCE_TONE[src] || '') + '" data-act="src-info" data-src="' + esc(src) + '">' + esc(SOURCE_LABEL[src] || src) + '</button>';
+  }
   function catIcon(c, cls) { return '<div class="ico ' + (cls || '') + '">' + icon(c ? c.icon : 'tag', 20) + '</div>'; }
   function seg(key, options, current, cls) {
     return '<div class="seg ' + (cls || '') + '" role="tablist">' + options.map(function (o) {
       var on = String(o[0]) === String(current);
       return '<button role="tab" aria-selected="' + on + '" class="' + (on ? 'on' : '') + '" data-act="set" data-key="' + key + '" data-val="' + o[0] + '">' + o[1] + '</button>';
     }).join('') + '</div>';
-  }
-  function miniBtns(kind, id) {
-    return '<div class="mini-btns"><button class="mini" data-act="edit-' + kind + '" data-id="' + id + '" aria-label="Edit">' + icon('edit', 15) + '</button>' +
-      '<button class="mini" data-act="del-' + kind + '" data-id="' + id + '" aria-label="Delete">' + icon('trash', 15) + '</button></div>';
   }
   function top(title, opts) {
     opts = opts || {};
@@ -143,57 +167,122 @@
       '<button class="stat" data-act="page" data-val="debts"><div class="lbl">Debts</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' need balance' : 'all debts') + '</div></button>' +
       '<button class="stat" data-act="page" data-val="networth"><div class="lbl">Net worth</div><div class="val num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div><div class="per">assets − debts</div></button></div>';
 
-    h += '<section class="section"><div class="section-head"><h2>Expenses</h2><button class="link" data-act="add-item" data-dir="out">' + icon('plus', 16) + ' Add</button></div>';
-    h += renderCategoryList(sum);
+    h += runwayLine();
+
+    // Earnings first, then Expenses, then One-offs (listed, never counted).
+    var view = s.view, incomes = byOrder(S.items.filter(function (i) { return i.direction === 'in'; }));
+    var incShown = visibleItems(incomes, 'earn'), incOff = incomes.filter(isCancelled).length;
+    h += secOpen('earn') + secHead('Earnings', 'earn', { total: money(sum.income, { dp: 0 }) + VIEW_SHORT[view], add: addBtn('data-act="add-item" data-dir="in"') });
+    h += incShown.length ? '<div class="list" data-sort-list="items:in">' + incShown.map(function (it) { return itemRow(it, { sortable: true }); }).join('') + '</div>' : '<div class="card">' + emptyBlock('wallet', 'No earnings yet', 'Add your income sources.') + '</div>';
+    h += incOff ? '<div class="sec-foot">' + cancelledLink('earn', incOff) + '</div>' : '';
     h += '</section>';
 
-    var incomes = S.items.filter(function (i) { return i.direction === 'in'; });
-    h += '<section class="section" id="earnings"><div class="section-head"><h2>Earnings</h2><button class="link" data-act="add-item" data-dir="in">' + icon('plus', 16) + ' Add</button></div>';
-    h += incomes.length ? '<div class="list">' + incomes.map(function (it) { return itemRow(it, false); }).join('') + '</div>' : '<div class="card">' + emptyBlock('wallet', 'No earnings yet', 'Add your income sources.') + '</div>';
-    return h + '</section>';
+    h += secOpen('exp') + secHead('Expenses', 'exp', { add: addBtn('data-act="add-item" data-dir="out"') });
+    h += renderCategoryList(sum) + '</section>';
+
+    var ones = byOrder(S.items.filter(function (i) { return i.direction === 'out' && HF.isOneOff(S, i); }));
+    if (ones.length) {
+      var oneShown = visibleItems(ones, 'one'), oneOff = ones.filter(isCancelled).length;
+      var oneTotal = ones.reduce(function (a, i) { return a + (isCancelled(i) ? 0 : Number(i.amount) || 0); }, 0);
+      h += secOpen('one') + secHead('One-offs', 'one', { total: money(oneTotal, { dp: 0 }), add: addBtn('data-act="add-item" data-dir="out" data-cat="' + oneoffCatId() + '"') });
+      h += '<div class="list" data-sort-list="items:oneoff">' + oneShown.map(function (it) { return itemRow(it, { sortable: true }); }).join('') + '</div>';
+      h += '<div class="sec-foot"><span class="muted small">Listed so nothing is hidden. Not counted in Expenses.</span>' + cancelledLink('one', oneOff) + '</div></section>';
+    }
+    return h;
+  }
+  function oneoffCatId() { var c = S.categories.filter(function (c) { return c.type === 'oneoff'; })[0]; return c ? c.id : ''; }
+
+  // ---------- Runway: how long the cash reserve lasts at recent spending ----------
+  function bankWindow() {
+    if (!S.transactions.length) return null;
+    var last = S.transactions.reduce(function (m, t) { return t.date > m ? t.date : m; }, ''), first = S.transactions.reduce(function (m, t) { return t.date < m ? t.date : m; }, last);
+    var end = HF.parseISO(last), start = new Date(end); start.setDate(start.getDate() - 13 * 7 + 1);
+    var startISO = HF.toISO(start) < first ? first : HF.toISO(start);
+    var weeks = Math.max(1, Math.min(13, Math.ceil(((end - HF.parseISO(startISO)) / 864e5 + 1) / 7)));
+    return { start: startISO, end: last, weeks: weeks };
+  }
+  function runwayLine() {
+    var reserve = assetsIn('cash').reduce(function (a, x) { return a + (Number(x.value) || 0); }, 0);
+    var win = bankWindow(), rate = 0, basis;
+    if (win) {
+      S.transactions.forEach(function (t) { if (t.date >= win.start && t.date <= win.end && t.amount < 0 && !HF.txExcluded(S, t)) rate -= t.amount; });
+      rate = rate / win.weeks; basis = 'last ' + win.weeks + ' weeks’ rate';
+    }
+    if (!rate) { rate = HF.budgetSummary(S, 'weekly').expenses; basis = 'budgeted rate'; }
+    var body;
+    if (!reserve) body = '<b>Runway</b><span>Add your bank balances in Assets to see how long your reserve lasts.</span>';
+    else {
+      var wks = rate ? reserve / rate : 0;
+      body = '<b>Reserve lasts ~' + (wks >= 10 ? Math.round(wks) : wks.toFixed(1)) + ' week' + (wks === 1 ? '' : 's') + ' at ' + basis + '</b>' +
+        '<span class="num">' + money(reserve, { dp: 0 }) + ' cash ÷ ' + money(rate, { dp: 0 }) + '/wk spending</span>';
+    }
+    return '<button class="runway" data-act="page" data-val="assets">' + icon('umbrella', 20) + '<div>' + body + '</div>' + icon('chev', 16, 'chev') + '</button>';
+  }
+  // Bank average for a manual line: matching transactions in the same category over the last 13 weeks.
+  var STOP = { 'and': 1, 'the': 1, 'with': 1, 'from': 1, 'for': 1, 'payment': 1, 'repayment': 1, 'weekly': 1, 'monthly': 1 };
+  function bankAvgWeekly(it) {
+    var win = bankWindow(); if (!win) return null;
+    var words = [it.provider || ''].concat(String(it.name).split(/[\s\-—–\/,()·&']+/)).map(function (w) { return w.toLowerCase(); })
+      .filter(function (w) { return w.length >= 4 && !STOP[w]; });
+    var alone = S.items.filter(function (x) { return x.active && x.direction === it.direction && x.categoryId === it.categoryId; }).length === 1;
+    var total = 0, hits = 0;
+    S.transactions.forEach(function (t) {
+      if (t.date < win.start || t.date > win.end || HF.txExcluded(S, t) || (t.amount < 0) !== (it.direction === 'out')) return;
+      if (t.category_id !== it.categoryId) return;
+      var text = ((t.merchant || '') + ' ' + (t.description_raw || '')).toLowerCase();
+      if (alone || words.some(function (w) { return text.indexOf(w) >= 0; })) { total += Math.abs(t.amount); hits++; }
+    });
+    return hits ? total / win.weeks : null;
+  }
+  var MANUAL_SOURCES = { manual: 1, cash: 1, assumption: 1 };
+  function bankCompare(it, v) {
+    if (!MANUAL_SOURCES[it.source] || it.frequency === 'oneoff') return '';
+    var avg = bankAvgWeekly(it); if (avg == null) return '';
+    return 'Budget ' + money(v, { dp: 0 }) + ' · Bank avg ' + money(HF.convert(avg, 'weekly', null, S.settings.view), { dp: 0 });
   }
 
   function renderCategoryList(sum) {
-    var s = S.settings, rows = [];
+    var rows = [];
     expenseCats().forEach(function (c) {
-      var items = S.items.filter(function (i) { return i.direction === 'out' && i.categoryId === c.id; });
+      if (c.type === 'oneoff') return;
+      var items = catItems(c.id).filter(function (i) { return !HF.isOneOff(S, i); });
       if (!items.length) return;
-      var v = sum.byCat[c.id] || 0;
-      var isOne = c.type === 'oneoff';
-      var shown = isOne ? items.reduce(function (a, i) { return a + (i.active ? Number(i.amount) || 0 : 0); }, 0) : v;
-      rows.push({ c: c, v: v, shown: shown, dim: isOne, note: isOne ? 'not counted · total' : '' });
+      rows.push({ c: c, v: sum.byCat[c.id] || 0, items: items });
     });
     if (!rows.length) return '<div class="card">' + emptyBlock('tag', 'No expenses yet', 'Add your first expense.') + '</div>';
     var max = Math.max.apply(null, rows.map(function (r) { return r.v; }).concat([1]));
-    // Tap a category to open it in place; drag the grip to reorder categories or the items inside.
-    return '<div class="list" data-sort-list="cats">' + rows.map(function (r) {
+    // Each category is its own card. Tap to open in place; Edit (section header) shows the drag grips.
+    return '<div class="cat-stack" data-sort-list="cats">' + rows.map(function (r) {
       var pct = sum.expenses ? r.v / sum.expenses * 100 : 0, key = 'c_' + r.c.id, open = ui.open[key];
-      var h = '<div class="grp' + (open ? ' open' : '') + '" data-sort-id="' + r.c.id + '"><div class="row cat-row ' + (r.dim ? 'dim' : '') + '" role="button" tabindex="0" aria-expanded="' + !!open + '" data-act="toggle" data-id="' + key + '">' + grip() + catIcon(r.c) +
-        '<div class="main"><div class="top-line"><span class="name">' + esc(r.c.name) + '</span><span class="num" style="font-weight:700">' + money(r.shown, { dp: 0 }) + '</span></div>' +
-        '<div class="top-line"><div class="bar" style="flex:1;margin-right:12px"><span style="width:' + (r.dim ? 0 : r.v / max * 100).toFixed(1) + '%"></span></div><span class="pct">' + (r.note || pct.toFixed(0) + '%') + '</span></div></div>' +
+      var shown = visibleItems(r.items, key), off = r.items.filter(isCancelled).length;
+      var h = '<div class="grp' + (open ? ' open' : '') + '" data-sort-id="' + r.c.id + '"><div class="row cat-row" role="button" tabindex="0" aria-expanded="' + !!open + '" data-act="toggle" data-id="' + key + '">' + grip() + catIcon(r.c) +
+        '<div class="main"><div class="top-line"><span class="name">' + esc(r.c.name) + '</span><span class="amt num">' + money(r.v, { dp: 0 }) + '</span></div>' +
+        '<div class="top-line"><div class="bar"><span style="width:' + (r.v / max * 100).toFixed(1) + '%"></span></div><span class="pct num">' + pct.toFixed(0) + '%</span></div></div>' +
         icon('chev', 18, 'chev') + '</div>';
       if (open) {
-        h += '<div class="grp-body" data-sort-list="items:' + r.c.id + '">' + catItems(r.c.id).map(function (it) { return itemRow(it, false, true); }).join('') + '</div>' +
-          '<div class="grp-foot"><button class="link" data-act="add-item" data-dir="out" data-cat="' + r.c.id + '">' + icon('plus', 16) + ' Add expense</button>' +
+        h += '<div class="grp-body" data-sort-list="items:' + r.c.id + '">' + shown.map(function (it) { return itemRow(it, { sortable: true }); }).join('') + '</div>' +
+          '<div class="grp-foot"><button class="link" data-act="add-item" data-dir="out" data-cat="' + r.c.id + '">' + icon('plus', 16) + ' Add</button>' + cancelledLink(key, off) +
           '<button class="link" data-act="page" data-val="category" data-id="' + r.c.id + '">Details ' + icon('chev', 14) + '</button></div>';
       }
       return h + '</div>';
     }).join('') + '</div>';
   }
 
-  function itemRow(it, showCat, sortable) {
+  // One budget line. Tap to edit, swipe left to delete; the grip shows only in reorder mode.
+  function itemRow(it, opts) {
+    opts = opts || {};
     var view = S.settings.view, reason = HF.excludedReason(S, it), isOne = it.frequency === 'oneoff';
     var v = isOne ? Number(it.amount) || 0 : conv(it, view);
     var c = cat(it.categoryId), bits = [srcBadge(it.source)];
     if (it.review) bits.push(badge('Review', 'flag'));
-    if (reason && reason !== 'Business') bits.push(badge(reason, 'outline'));
-    if (it.endDate && !reason) bits.push(badge('Ends ' + HF.fmtDate(it.endDate, true), 'outline'));
-    bits.push('<span>' + esc((Number(it.amount) ? money(it.amount, { dp: 2 }) : '—') + ' ' + HF.freqLabel(it)) + (showCat && c ? ' · ' + esc(c.name) : '') + '</span>');
-    if (it.source === 'statement_avg') bits.push('<span style="flex-basis:100%">' + AVG_LABEL + '</span>');
-    return '<div class="row ' + (reason ? 'dim' : '') + (!it.active ? ' off' : '') + '"' + (sortable ? ' data-sort-id="' + it.id + '">' + grip() : '>') +
-      '<div class="main" data-act="edit-item" data-id="' + it.id + '" style="cursor:pointer"><div class="name">' + esc(it.name) + '</div><div class="sub">' + bits.join('') + '</div></div>' +
-      '<div class="amt num ' + (it.direction === 'in' && !reason ? 'pos' : '') + '">' + (Number(it.amount) ? money(v) : '—') + '<small>' + (isOne ? 'once' : VIEW_SHORT[view]) + '</small></div>' +
-      miniBtns('item', it.id) + '</div>';
+    if (reason && reason !== 'Business' && reason !== 'One-off') bits.push(badge(reason));
+    if (it.endDate && !reason) bits.push(badge('Ends ' + HF.fmtDate(it.endDate, true)));
+    bits.push('<span>' + esc((Number(it.amount) ? money(it.amount, { dp: 2 }) : '—') + ' ' + HF.freqLabel(it)) + (opts.showCat && c ? ' · ' + esc(c.name) : '') + '</span>');
+    var cmp = bankCompare(it, v);
+    return '<div class="row item-row swipe' + (reason && reason !== 'One-off' ? ' dim' : '') + (isCancelled(it) ? ' off' : '') + '" role="button" tabindex="0" data-act="edit-item" data-id="' + it.id + '"' + (opts.sortable ? ' data-sort-id="' + it.id + '">' + grip() : '>') +
+      '<div class="main"><div class="name">' + esc(it.name) + '</div><div class="sub">' + bits.join('') + '</div>' + (cmp ? '<div class="cmp num">' + cmp + '</div>' : '') + '</div>' +
+      '<div class="amt num ' + (it.direction === 'in' && !reason ? 'pos' : '') + '">' + (Number(it.amount) ? money(v, { dp: 2 }) : '—') + '<small>' + (isOne ? 'once' : VIEW_SHORT[view]) + '</small></div>' +
+      swipeDel('item', it.id) + '</div>';
   }
 
   // ---------- Actual mode ----------
@@ -254,7 +343,7 @@
     h += '</div>';
     h += '<div class="mt16">' + seg('catTab', [['items', 'Items'], ['insight', 'Insight']], ui.catTab, 'sm') + '</div>';
     if (ui.catTab === 'items') {
-      h += items.length ? '<div class="list mt12" data-sort-list="items:' + c.id + '">' + catItems(c.id).map(function (it) { return itemRow(it, false, true); }).join('') + '</div>' : '<div class="card mt12">' + emptyBlock(c.icon, 'Nothing here yet', 'Add an expense to this category.') + '</div>';
+      h += items.length ? secOpen('catpage', 'mt12') + secHead('Items', 'catpage') + '<div class="list" data-sort-list="items:' + c.id + '">' + catItems(c.id).map(function (it) { return itemRow(it, { sortable: true }); }).join('') + '</div></section>' : '<div class="card mt12">' + emptyBlock(c.icon, 'Nothing here yet', 'Add an expense to this category.') + '</div>';
       var tx = S.transactions.filter(function (t) { return t.category_id === c.id; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 8);
       if (tx.length) h += '<div class="section-head mt16"><h2>Recent transactions</h2></div><div class="list">' + tx.map(txRow).join('') + '</div>';
     } else h += categoryInsight(c, items, v);
@@ -525,8 +614,8 @@
       '<div class="split" style="grid-template-columns:1fr 1fr"><div><small>Est. interest / month</small><b class="num">' + money(interest, { dp: 0 }) + '</b></div><div><small>Balances not set</small><b>' + missing + '</b></div></div></div>';
     h += '<div class="mt16">' + seg('debtTab', [['active', 'Active'], ['paid', 'Paid off']], ui.debtTab, 'sm') + '</div>';
     var list = byOrder(inScope).filter(function (d) { return ui.debtTab === 'active' ? d.active !== false : d.active === false; });
-    h += list.length ? '<div class="list mt12" data-sort-list="debts">' + list.map(debtRow).join('') + '</div>' : '<div class="card mt12">' + emptyBlock('card', ui.debtTab === 'active' ? 'No active debts' : 'Nothing paid off yet', ui.debtTab === 'active' ? 'Add one to track it.' : 'Turn a debt off when it\'s paid and it moves here.') + '</div>';
-    h += '<button class="btn soft block mt12" data-act="add-debt">' + icon('plus', 18) + ' Add debt</button>';
+    h += secOpen('debts', 'mt12') + secHead(ui.debtTab === 'active' ? 'Active' : 'Paid off', list.length > 1 ? 'debts' : '', { add: addBtn('data-act="add-debt"') });
+    h += list.length ? '<div class="list" data-sort-list="debts">' + list.map(debtRow).join('') + '</div></section>' : '</section><div class="card mt12">' + emptyBlock('card', ui.debtTab === 'active' ? 'No active debts' : 'Nothing paid off yet', ui.debtTab === 'active' ? 'Add one to track it.' : 'Turn a debt off when it\'s paid and it moves here.') + '</div>';
     h += '<div class="note">Repayments are targets. What actually left the bank is in Transactions under Debt Repayments.</div>';
     return h;
   }
@@ -539,10 +628,10 @@
     if (payoff) bits.push('<span>' + payoff + '</span>');
     if (d.limit && bal > d.limit) bits.push('<span class="neg" style="font-weight:600">over limit by ' + money(bal - d.limit, { dp: 2 }) + '</span>');
     var util = d.limit && bal != null ? Math.min(100, bal / d.limit * 100) : null;
-    return '<button class="row" data-act="edit-debt" data-id="' + d.id + '" data-sort-id="' + d.id + '">' + grip() + '<div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + bits.join('<span>·</span>') + '</div>' +
+    return '<div class="row swipe" role="button" tabindex="0" data-act="edit-debt" data-id="' + d.id + '" data-sort-id="' + d.id + '">' + grip() + '<div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + bits.join('<span>·</span>') + '</div>' +
       (util != null ? '<div class="bar ' + (bal > d.limit ? 'over' : '') + '"><span style="width:' + util.toFixed(1) + '%"></span></div>' : '') + '</div>' +
       '<div class="amt num">' + (bal == null ? '<span class="muted" style="font-weight:600;font-size:13px">Balance not set</span>' : money(bal, { dp: 2 })) +
-      '<small>' + (Number(d.payment) ? money(d.payment, { dp: 2 }) + ' / ' + ({ weekly: 'week', fortnightly: 'fortnight', monthly: 'month', quarterly: 'quarter' }[d.frequency] || d.frequency) : 'no repayment set') + '</small></div></button>';
+      '<small>' + (Number(d.payment) ? money(d.payment, { dp: 2 }) + ' / ' + ({ weekly: 'week', fortnightly: 'fortnight', monthly: 'month', quarterly: 'quarter' }[d.frequency] || d.frequency) : 'no repayment set') + '</small></div>' + swipeDel('debt', d.id) + '</div>';
   }
 
   // ===================== NET WORTH =====================
@@ -568,14 +657,14 @@
     h += '<div class="range">' + ['1M', '3M', '6M', '1Y', 'All'].map(function (r) { return '<button class="' + (ui.nwRange === r ? 'on' : '') + '" data-act="nw-range" data-val="' + r + '">' + r + '</button>'; }).join('') + '</div></div>';
 
     var activeDebts = byOrder(S.debts).filter(function (d) { return d.active !== false; });
-    h += '<div class="list mt16">' +
+    h += secOpen('nw', 'mt16') + secHead('Breakdown', 'nw') + '<div class="list">' +
       nwSection('nw_a', 'bank', 'Assets', S.assets.length + ' accounts &amp; holdings', money(nw.assets, { dp: 0 }), '',
         '<div class="grp-body" data-sort-list="assetcats">' + assetGroups() + '</div>',
         '<button class="link" data-act="add-asset">' + icon('plus', 16) + ' Add asset</button>') +
       nwSection('nw_d', 'card', 'Debts', activeDebts.length + ' active' + (nw.missing.length ? ' · ' + nw.missing.length + ' without balance' : ''), '−' + money(nw.liabilities, { dp: 0 }), 'neg',
         '<div class="grp-body" data-sort-list="debts">' + activeDebts.map(debtRow).join('') + '</div>',
         '<button class="link" data-act="add-debt">' + icon('plus', 16) + ' Add debt</button>') +
-      '<div class="row nw-total"><div class="main"><div class="name">Net worth</div><div class="sub">Assets − debts</div></div><div class="amt num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div></div></div>';
+      '<div class="row nw-total"><div class="main"><div class="name">Net worth</div><div class="sub">Assets − debts</div></div><div class="amt num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div></div></div></section>';
     if (nw.missing.length) h += '<div class="note"><b>Not yet subtracted:</b> ' + nw.missing.map(function (d) { return esc(d.name); }).join(', ') + ' — no balance set yet. Tap Debts to add them.</div>';
     return h;
   }
@@ -590,8 +679,8 @@
     var nw = HF.netWorth(S);
     var h = top('Assets', { back: true, actions: '<button class="icon-btn" data-act="add-asset" aria-label="Add asset">' + icon('plus', 22) + '</button>' });
     h += '<div class="card hero"><div class="lbl">Total assets</div><div class="big num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts &amp; holdings</div></div>';
-    h += '<div class="list mt16" data-sort-list="assetcats">' + assetGroups();
-    h += '</div><button class="btn soft block mt12" data-act="add-asset">' + icon('plus', 18) + ' Add asset</button>';
+    h += secOpen('assets', 'mt16') + secHead('By category', 'assets', { add: addBtn('data-act="add-asset"') });
+    h += '<div class="cat-stack" data-sort-list="assetcats">' + assetGroups() + '</div></section>';
     h += '<p class="muted small" style="margin:10px 4px">Market values change — update them when you check.</p>';
     return h;
   }
@@ -600,8 +689,8 @@
     assetCats().forEach(function (g) {
       var list = assetsIn(g.id);
       if (!list.length) return;
-      // Groups start open; tapping a header collapses it. Drag the grips to reorder.
-      var tot = list.reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0), key = 'asx_' + g.id, open = !ui.open[key];
+      // Groups start closed; tap a header to open it. Edit shows the drag grips.
+      var tot = list.reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0), key = 'asx_' + g.id, open = ui.open[key];
       h += '<div class="grp' + (open ? ' open' : '') + '" data-sort-id="' + g.id + '"><div class="row cat-row" role="button" tabindex="0" data-act="toggle" data-id="' + key + '">' + grip() + '<div class="ico">' + icon(g.icon, 20) + '</div><div class="main"><div class="name">' + esc(g.name) + '</div><div class="sub">' + list.length + ' item' + (list.length === 1 ? '' : 's') + '</div></div><div class="amt num">' + money(tot, { dp: 0 }) + '</div>' + icon('chev', 18, 'chev') + '</div>' +
         (open ? '<div class="grp-body" data-sort-list="assets:' + g.id + '">' + list.map(assetRow).join('') + '</div>' +
           '<div class="grp-foot"><button class="link" data-act="add-asset" data-type="' + g.id + '">' + icon('plus', 16) + ' Add</button><button class="link" data-act="edit-assetcat" data-id="' + g.id + '">' + icon('edit', 14) + ' Edit category</button></div>' : '') + '</div>';
@@ -609,8 +698,8 @@
     return h;
   }
   function assetRow(a) {
-    return '<div class="row" data-sort-id="' + a.id + '">' + grip() + '<div class="main" data-act="edit-asset" data-id="' + a.id + '" style="cursor:pointer"><div class="name">' + esc(a.name) + '</div><div class="sub">' + '' +
-      '<span>Updated ' + (a.updated ? HF.fmtDate(a.updated, true) : '—') + '</span>' + (a.notes ? '<span>· ' + esc(a.notes) + '</span>' : '') + '</div></div><div class="amt num">' + money(a.value, { dp: 2 }) + '</div>' + miniBtns('asset', a.id) + '</div>';
+    return '<div class="row swipe" role="button" tabindex="0" data-act="edit-asset" data-id="' + a.id + '" data-sort-id="' + a.id + '">' + grip() + '<div class="main"><div class="name">' + esc(a.name) + '</div><div class="sub">' + '' +
+      '<span>Updated ' + (a.updated ? HF.fmtDate(a.updated, true) : '—') + '</span>' + (a.notes ? '<span>· ' + esc(a.notes) + '</span>' : '') + '</div></div><div class="amt num">' + money(a.value, { dp: 2 }) + '</div>' + swipeDel('asset', a.id) + '</div>';
   }
 
   // ===================== MORE =====================
@@ -984,8 +1073,8 @@
       '<div class="note">Checked top to bottom; the first match wins. Matching ignores case. Transactions you edited by hand are never overwritten.</div>' +
       '<div class="list mt12">' + S.rules.map(function (r) {
         var c = cat(r.categoryId);
-        return '<div class="row"><div class="main" data-act="edit-rule" data-id="' + r.id + '" style="cursor:pointer"><div class="name" style="font-family:ui-monospace,Menlo,monospace;font-size:13.5px">' + esc(r.pattern) + '</div>' +
-          '<div class="sub"><span>→ ' + esc(r.merchant || '(keep name)') + (c ? ' · ' + esc(c.name) : '') + '</span>' + (r.flag === 'internal' ? badge('Transfer', 'outline') : r.flag === 'cashDeposit' ? badge('Cash deposit', 'outline') : '') + '</div></div>' + miniBtns('rule', r.id) + '</div>';
+        return '<div class="row swipe" role="button" tabindex="0" data-act="edit-rule" data-id="' + r.id + '"><div class="main"><div class="name" style="font-family:ui-monospace,Menlo,monospace;font-size:13.5px">' + esc(r.pattern) + '</div>' +
+          '<div class="sub"><span>→ ' + esc(r.merchant || '(keep name)') + (c ? ' · ' + esc(c.name) : '') + '</span>' + (r.flag === 'internal' ? badge('Transfer', 'outline') : r.flag === 'cashDeposit' ? badge('Cash deposit', 'outline') : '') + '</div></div>' + swipeDel('rule', r.id) + '</div>';
       }).join('') + '</div>');
   }
   function openRuleForm(id) {
@@ -1006,8 +1095,8 @@
     openSheet('Accounts', '<button class="btn soft block" data-act="add-account">' + icon('plus', 18) + ' New account</button>' +
       '<div class="note">Mark accounts you own. A transfer mentioning an owned account\'s keywords — or equal and opposite amounts between two owned accounts within 3 days — is an internal transfer. Kids accounts can count transfers as Family Savings instead.</div>' +
       '<div class="list mt12">' + S.accounts.map(function (a) {
-        return '<div class="row"><div class="main" data-act="edit-account" data-id="' + a.id + '" style="cursor:pointer"><div class="name">' + esc(a.name) + '</div><div class="sub">' + badge(a.owned ? 'Owned' : 'External', 'outline') +
-          (a.transferAs === 'savings' ? badge('Transfers = savings') : '') + '<span>' + esc(a.match ? 'matches “' + a.match + '”' : 'no keywords') + '</span></div></div>' + miniBtns('account', a.id) + '</div>';
+        return '<div class="row swipe" role="button" tabindex="0" data-act="edit-account" data-id="' + a.id + '"><div class="main"><div class="name">' + esc(a.name) + '</div><div class="sub">' + badge(a.owned ? 'Owned' : 'External', 'outline') +
+          (a.transferAs === 'savings' ? badge('Transfers = savings') : '') + '<span>' + esc(a.match ? 'matches “' + a.match + '”' : 'no keywords') + '</span></div></div>' + swipeDel('account', a.id) + '</div>';
       }).join('') + '</div>');
   }
   function openAccountForm(id) {
@@ -1086,7 +1175,7 @@
   function confirmDel(what) { return confirm('Delete ' + what + '? This can’t be undone.'); }
   var actions = {
     'app-menu': function (b) { if (document.getElementById('appMenu')) closeAppMenu(); else openAppMenu(b); },
-    tab: function (b, e) { e.preventDefault(); closeAppMenu(); ui.page = null; ui.stack = []; S.settings.tab = b.dataset.val; closeSheet(true); commit(); window.scrollTo(0, 0); },
+    tab: function (b, e) { e.preventDefault(); closeAppMenu(); ui.page = null; ui.stack = []; ui.edit = {}; S.settings.tab = b.dataset.val; closeSheet(true); commit(); window.scrollTo(0, 0); },
     page: function (b) { closeSheet(true); if (b.dataset.val === 'category') ui.catTab = 'items'; go({ name: b.dataset.val, id: b.dataset.id }); },
     back: function () { ui.page = ui.stack.pop() || null; render(); window.scrollTo(0, 0); },
     set: function (b) {
@@ -1097,6 +1186,9 @@
     },
     overview: openOverview,
     toggle: function (b) { ui.open[b.dataset.id] = !ui.open[b.dataset.id]; render(); },
+    reorder: function (b) { ui.edit[b.dataset.val] = !ui.edit[b.dataset.val]; closeSwipe(); render(); },
+    'show-off': function (b) { ui.showOff[b.dataset.id] = !ui.showOff[b.dataset.id]; render(); },
+    'src-info': function (b, e) { e.stopPropagation(); showPop(b, SOURCE_INFO[b.dataset.src] || 'Where this figure came from.'); },
     'add-item': function (b) { openItemForm(null, b.dataset.dir, b.dataset.cat); },
     'edit-item': function (b) { openItemForm(b.dataset.id); },
     'del-item': function (b) {
@@ -1171,18 +1263,24 @@
     var el = g.closest('[data-sort-id]'), list = el && el.parentElement;
     if (!list || !list.hasAttribute('data-sort-list')) return;
     e.preventDefault();
-    drag = { el: el, list: list, y0: e.clientY, id: e.pointerId, moved: false };
+    drag = { el: el, list: list, grab: e.clientY - el.getBoundingClientRect().top, id: e.pointerId, moved: false };
     el.classList.add('dragging'); list.classList.add('sorting');
     try { g.setPointerCapture(e.pointerId); } catch (err) {}
   });
+  function sortSib(el, dir) { var x = el[dir]; while (x && !x.hasAttribute('data-sort-id')) x = x[dir]; return x; }
   document.addEventListener('pointermove', function (e) {
     if (!drag || e.pointerId !== drag.id) return;
     e.preventDefault();
-    var el = drag.el, dy = e.clientY - drag.y0, prev = el.previousElementSibling, next = el.nextElementSibling;
-    // Swap with a neighbour once the dragged row passes its middle; keep the row under the finger.
-    if (next && next.hasAttribute('data-sort-id') && dy > next.offsetHeight / 2) { drag.list.insertBefore(next, el); drag.y0 += next.offsetHeight; drag.moved = true; }
-    else if (prev && prev.hasAttribute('data-sort-id') && -dy > prev.offsetHeight / 2) { drag.list.insertBefore(el, prev); drag.y0 -= prev.offsetHeight; drag.moved = true; }
-    el.style.transform = 'translateY(' + (e.clientY - drag.y0) + 'px)';
+    var el = drag.el, y = e.clientY, next, prev, r, guard = 0;
+    el.style.transform = '';
+    // Swap with a neighbour once the finger passes its middle (works with gaps between cards).
+    while (guard++ < 20) {
+      next = sortSib(el, 'nextElementSibling'); prev = sortSib(el, 'previousElementSibling');
+      if (next && (r = next.getBoundingClientRect()) && y > r.top + r.height / 2) { drag.list.insertBefore(next, el); drag.moved = true; continue; }
+      if (prev && (r = prev.getBoundingClientRect()) && y < r.top + r.height / 2) { drag.list.insertBefore(el, prev); drag.moved = true; continue; }
+      break;
+    }
+    el.style.transform = 'translateY(' + (y - drag.grab - el.getBoundingClientRect().top) + 'px)';
   });
   // Only some rows may be on screen; slot the new order into their existing positions.
   function applyOrder(all, ids, pool) {
@@ -1202,10 +1300,58 @@
     else if (kind === 'assetcats') applyOrder(assetCats(), ids, S.assetCats);
     else if (kind === 'debts') applyOrder(byOrder(S.debts), ids, S.debts);
     else if (parts[0] === 'assets') applyOrder(assetsIn(parts[1]), ids, S.assets);
+    else if (kind === 'items:in') applyOrder(byOrder(S.items.filter(function (i) { return i.direction === 'in'; })), ids, S.items);
+    else if (kind === 'items:oneoff') applyOrder(byOrder(S.items.filter(function (i) { return i.direction === 'out' && HF.isOneOff(S, i); })), ids, S.items);
     else if (parts[0] === 'items') applyOrder(catItems(parts[1]), ids, S.items);
     persist(); render();
   }
   document.addEventListener('pointerup', endDrag);
+
+  // ---------- Swipe left to reveal Delete (iOS style) ----------
+  var SW = 88, sw = null, openSwipe = null, eatClick = false;
+  function setX(row, x, animate) { row.classList.toggle('swiping', !animate); row.style.transform = x ? 'translateX(' + x + 'px)' : ''; }
+  function closeSwipe() { if (openSwipe) { setX(openSwipe, 0, true); openSwipe = null; } }
+  document.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('.grip')) return;
+    var row = e.target.closest('.swipe');
+    if (openSwipe && !(row === openSwipe && e.target.closest('.swipe-del'))) { closeSwipe(); eatClick = true; return; }
+    if (!row || row.closest('.reorder')) return;
+    sw = { row: row, x0: e.clientX, y0: e.clientY, id: e.pointerId, on: false };
+  });
+  document.addEventListener('pointermove', function (e) {
+    if (!sw || e.pointerId !== sw.id) return;
+    var dx = e.clientX - sw.x0, dy = e.clientY - sw.y0;
+    if (!sw.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { sw = null; return; }
+      if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      sw.on = true;
+    }
+    setX(sw.row, Math.max(-SW * 1.5, Math.min(0, dx)), false);
+  });
+  function endSwipe(e) {
+    if (!sw || (e && e.pointerId !== sw.id)) return;
+    var s0 = sw; sw = null;
+    if (!s0.on) return;
+    var dx = (e ? e.clientX : s0.x0) - s0.x0;
+    eatClick = true;
+    if (dx < -SW / 2) { setX(s0.row, -SW, true); openSwipe = s0.row; } else setX(s0.row, 0, true);
+  }
+  document.addEventListener('pointerup', endSwipe);
+  document.addEventListener('pointercancel', function (e) { if (sw && sw.on) setX(sw.row, 0, true); sw = null; });
+  document.addEventListener('click', function (e) { if (eatClick) { eatClick = false; e.stopPropagation(); e.preventDefault(); } }, true);
+
+  // ---------- Small popover (badge explanations) ----------
+  function closePop() { var p = document.getElementById('pop'); if (p) p.remove(); }
+  function showPop(anchor, text) {
+    closePop();
+    var p = document.createElement('div'); p.id = 'pop'; p.className = 'pop'; p.textContent = text;
+    document.body.appendChild(p);
+    var r = anchor.getBoundingClientRect(), w = p.offsetWidth;
+    p.style.left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2)) + 'px';
+    p.style.top = (r.bottom + window.scrollY + 8) + 'px';
+  }
+  document.addEventListener('click', function (e) { if (!e.target.closest('[data-act="src-info"]') && !e.target.closest('#pop')) closePop(); }, true);
+  window.addEventListener('scroll', closePop, { passive: true });
   document.addEventListener('pointercancel', endDrag);
 
   document.addEventListener('click', function (e) {
