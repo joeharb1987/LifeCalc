@@ -93,9 +93,9 @@ button{cursor:pointer;}
 .display{position:relative;flex:1 1 auto;min-height:64px;display:flex;flex-direction:column;justify-content:flex-end;
   padding:0 calc((100% - (4 * var(--key) + 3 * var(--gap))) / 2 + 6px) 10px;overflow:hidden;}
 .expr{min-height:30px;color:var(--text-dim);text-align:right;font-size:28px;font-weight:400;white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;direction:ltr;letter-spacing:-.01em;}
+  text-overflow:ellipsis;direction:ltr;letter-spacing:-.01em;cursor:pointer;}
 .result{color:var(--text);text-align:right;font-size:88px;font-weight:300;line-height:1.05;letter-spacing:-.035em;white-space:nowrap;
-  overflow:hidden;user-select:text;-webkit-user-select:text;font-variant-numeric:tabular-nums;}
+  overflow:hidden;cursor:pointer;font-variant-numeric:tabular-nums;}
 
 /* ---------- Keypad ---------- */
 .pad{display:grid;justify-content:center;flex:0 0 auto;}
@@ -120,9 +120,11 @@ button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:v
 .k-sci sub{font-size:.62em;}
 .angle-badge{position:absolute;left:calc((100% - (4 * var(--key) + 3 * var(--gap))) / 2 + 6px);bottom:22px;font-size:15px;color:var(--text-dim);}
 .angle-badge[hidden]{display:none;}
-.clip-menu{position:absolute;z-index:35;display:flex;background:#2C2C2E;border-radius:10px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+.clip-menu{position:absolute;z-index:35;display:flex;background:#3A3A3C;border-radius:9px;box-shadow:0 6px 20px rgba(0,0,0,.45);animation:clipIn .12s ease-out;}
+.clip-menu::after{content:"";position:absolute;bottom:-6px;right:var(--arrow,24px);border:6px solid transparent;border-bottom:0;border-top-color:#3A3A3C;}
+@keyframes clipIn{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:none;}}
 .clip-menu[hidden]{display:none;}
-.clip-menu button{border:0;background:transparent;color:#fff;font-size:15px;padding:10px 16px;}
+.clip-menu button{border:0;background:transparent;color:#fff;font-size:14px;font-weight:500;padding:8px 14px;}
 .clip-menu button + button{border-left:1px solid rgba(255,255,255,.15);}
 .k-sci.k-sci-op{color:var(--op)!important;}
 .key svg{width:42%;height:42%;}
@@ -548,7 +550,7 @@ html{background:#000;}
   }
 
   function updateDisplay(){
-    exprEl.textContent = justEvaluated && completedExpr ? prettify(completedExpr) + ' =' : ' ';
+    exprEl.textContent = justEvaluated && completedExpr ? prettify(completedExpr) : ' ';
     setResultText(prettify(display || '0'));
     updateClearLabel();
     // The operator just pressed stays lit until the next number, like iPhone.
@@ -561,7 +563,14 @@ html{background:#000;}
   // Top-left key: delete while there is something to delete, AC otherwise (iOS 18).
   var DELETE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 5H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9.2a2 2 0 0 1-1.5-.7L2.5 12l5.2-6.3A2 2 0 0 1 9.2 5Z"/><path d="m11.5 9.5 5 5M16.5 9.5l-5 5"/></svg>';
   function clearLabel(){ return (!display || justEvaluated) ? 'AC' : 'DEL'; }
-  function updateClearLabel(){}                  // iOS 26 has separate AC and delete keys
+  var clearKey = null;
+  function updateClearLabel(){                   // AC becomes C while a number is being typed (iOS 26)
+    clearKey = clearKey || document.querySelector('.key[data-act="clear"]');
+    if (!clearKey) return;
+    var c = display && !justEvaluated;
+    clearKey.textContent = c ? 'C' : 'AC';
+    clearKey.setAttribute('aria-label', c ? 'Clear' : 'All clear');
+  }
 
   function resetRepeat(){ repeatOp = null; repeatOperand = null; }
 
@@ -1202,27 +1211,32 @@ html{background:#000;}
     el.addEventListener('mouseleave',cancel);
   }
 
-  // Long-press the number for Copy / Paste, as on iPhone.
+  // Copy / Paste bubble above the number.
   var clipMenu = document.getElementById('clipMenu');
   function showClipMenu(){
     var panel = displayPanel.getBoundingClientRect(), r = resultEl.getBoundingClientRect();
     clipMenu.hidden = false;
     clipMenu.style.top = Math.max(0, r.top - panel.top - clipMenu.offsetHeight - 6) + 'px';
-    clipMenu.style.left = Math.max(8, panel.width - clipMenu.offsetWidth - 16) + 'px';
+    var left = Math.max(8, Math.min(panel.width - clipMenu.offsetWidth - 8, r.right - panel.left - clipMenu.offsetWidth));
+    clipMenu.style.left = left + 'px';
   }
-  (function(){
-    var timer;
-    function start(){ timer = setTimeout(showClipMenu, 480); }
-    function cancel(){ clearTimeout(timer); }
-    resultEl.addEventListener('touchstart', start, { passive:true });
-    resultEl.addEventListener('touchend', cancel);
-    resultEl.addEventListener('touchmove', cancel);
-    resultEl.addEventListener('mousedown', start);
-    resultEl.addEventListener('mouseup', cancel);
-    resultEl.addEventListener('mouseleave', cancel);
-    resultEl.addEventListener('contextmenu', function(e){ e.preventDefault(); showClipMenu(); });
-  })();
-  document.addEventListener('click', function(e){ if (!clipMenu.hidden && !clipMenu.contains(e.target)) clipMenu.hidden = true; });
+  // Tap (or long-press) the number for the Copy | Paste bubble, as on iPhone.
+  resultEl.addEventListener('click', function(){ if (clipMenu.hidden) showClipMenu(); else clipMenu.hidden = true; });
+  resultEl.addEventListener('contextmenu', function(e){ e.preventDefault(); showClipMenu(); });
+  document.addEventListener('click', function(e){
+    if (!clipMenu.hidden && !clipMenu.contains(e.target) && e.target !== resultEl) clipMenu.hidden = true;
+  });
+  // Tap the formula above an answer to bring it back and keep editing it.
+  exprEl.addEventListener('click', function(){
+    if (!justEvaluated || !completedExpr) return;
+    display = completedExpr;
+    completedExpr = '';
+    justEvaluated = false;
+    carry = null;
+    pendingFn = null;
+    resetRepeat();
+    updateDisplay();
+  });
   document.getElementById('clipCopy').addEventListener('click', function(){
     var v = screenValue();
     copyText(v === null || isNaN(v) ? resultEl.textContent : String(Number(v.toPrecision(15))));
