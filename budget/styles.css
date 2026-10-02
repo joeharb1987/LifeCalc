@@ -395,3 +395,11 @@ button.badge { cursor: pointer; }
 
 /* Safe areas on every page and sheet */
 .app { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+
+/* Colour theme swatches */
+.swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.swatches label { position: relative; }
+.swatches input { position: absolute; opacity: 0; inset: 0; }
+.swatches span { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); font-weight: 600; font-size: 14px; cursor: pointer; }
+.swatches i { width: 20px; height: 20px; border-radius: 50%; background: var(--sw); flex: 0 0 auto; }
+.swatches input:checked + span { border-color: var(--sw); box-shadow: inset 0 0 0 1px var(--sw); }

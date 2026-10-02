@@ -4,6 +4,7 @@
   var HF = window.HF, IM = HF.importer, icon = HF.icon;
   var S = HF.load() || HF.seed();
   S.settings.includeBusiness = true;
+  S.settings.mode = 'budget';   // one budget view (the Actual switch was removed)
   var ui = {
     page: null,               // sub-page over a tab: { name: 'category'|'networth'|'reports', id, from }
     open: {}, ovOpen: {}, ovMode: 'amount', actualOffset: 0,
@@ -154,9 +155,7 @@
   function renderBudget() {
     var s = S.settings;
     var h = top('Budget', { sub: greeting() + ', ' + esc(s.userName || 'there'), actions: '<button class="icon-btn" data-act="overview" aria-label="Expense overview">' + icon('dots', 22) + '</button>' });
-    h += '<div class="controls">' + seg('view', [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']], s.view) +
-      '<div class="row2">' + seg('mode', [['budget', 'Budget'], ['actual', 'Actual']], s.mode, 'sm') + '</div></div>';
-    if (s.mode === 'actual') return h + renderActual();
+    h += '<div class="controls">' + seg('view', [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']], s.view) + '</div>';
 
     var sum = HF.budgetSummary(S, s.view), w = VIEW_WORD[s.view];
     h += statTrio(sum.income, sum.expenses, sum.available, w);
@@ -285,42 +284,6 @@
       swipeDel('item', it.id) + '</div>';
   }
 
-  // ---------- Actual mode ----------
-  function renderActual() {
-    var view = S.settings.view;
-    if (!S.transactions.length) {
-      return '<div class="card">' + emptyBlock('bank', 'No statement data yet', 'Actual shows what really happened, from imported statements and manual cash entries.',
-        '<div class="btn-row"><button class="btn accent" data-act="import">Import statement</button><button class="btn" data-act="add-tx">Cash entry</button></div>') + '</div>';
-    }
-    var range = HF.periodRange(view, new Date(), ui.actualOffset);
-    var a = HF.actualSummary(S, range, view);
-    var h = '<div class="period"><button data-act="actual-shift" data-val="-1" aria-label="Previous">' + icon('back', 18) + '</button><b>' + HF.periodLabel(view, range) + '</b><button data-act="actual-shift" data-val="1" aria-label="Next">' + icon('chev', 18) + '</button></div>';
-    h += statTrio(a.income, a.expenses, a.available, VIEW_WORD[view]);
-    h += '<p class="muted small" style="margin:8px 4px 0">' + a.count + ' transactions' + (view === 'weekly' ? ' · grouped by budget week (Mon–Sun)' : '') + ' · excludes internal transfers, cash deposits & investments' + (a.oneoffs ? ' · includes ' + money(a.oneoffs) + ' one-offs' : '') + '</p>';
-    var txs = S.transactions.filter(function (t) { return HF.txInRange(t, range, view) && !HF.txExcluded(S, t); });
-    var keys = Object.keys(a.byCat).sort(function (x, y) { return a.byCat[y] - a.byCat[x]; });
-    h += '<section class="section"><div class="section-head"><h2>Money out</h2><button class="link" data-act="add-tx">' + icon('plus', 16) + ' Cash</button></div>';
-    if (!keys.length) h += '<div class="card pad muted">No spending in this period.</div>';
-    else {
-      var max = a.byCat[keys[0]];
-      h += '<div class="list">' + keys.map(function (k) {
-        var c = cat(k) || { name: 'Uncategorised', icon: 'tag' }, list = txs.filter(function (t) { return t.amount < 0 && (t.category_id || 'uncategorised') === k; });
-        var key = 'a_' + k, open = ui.open[key];
-        return '<div class="grp"><button class="row cat-row" data-act="toggle" data-id="' + key + '">' + catIcon(c) +
-          '<div class="main"><div class="top-line"><span class="name">' + esc(c.name) + '</span><span class="num" style="font-weight:700">' + money(a.byCat[k]) + '</span></div>' +
-          '<div class="top-line"><div class="bar" style="flex:1;margin-right:12px"><span style="width:' + (a.byCat[k] / max * 100).toFixed(1) + '%"></span></div><span class="pct">' + list.length + ' tx</span></div></div>' +
-          icon(open ? 'down' : 'chev', 18, 'chev') + '</button>' + (open ? list.map(txRow).join('') : '') + '</div>';
-      }).join('') + '</div>';
-    }
-    var inc = {};
-    txs.forEach(function (t) { if (t.amount > 0) { var k = t.merchant || t.description_raw; (inc[k] = inc[k] || { n: 0, v: 0 }); inc[k].n++; inc[k].v += t.amount; } });
-    var ik = Object.keys(inc).sort(function (x, y) { return inc[y].v - inc[x].v; });
-    h += '</section><section class="section"><div class="section-head"><h2>Money in</h2></div>';
-    h += ik.length ? '<div class="list">' + ik.map(function (k) {
-      return '<div class="row"><div class="ico round">' + icon('wallet', 20) + '</div><div class="main"><div class="name">' + esc(k) + '</div><div class="sub">' + inc[k].n + ' payment' + (inc[k].n > 1 ? 's' : '') + '</div></div><div class="amt num pos">+' + money(inc[k].v) + '</div></div>';
-    }).join('') + '</div>' : '<div class="card pad muted">No income in this period.</div>';
-    return h + '</section>';
-  }
 
   // ---------- Category detail ----------
   function renderCategory() {
@@ -719,9 +682,10 @@
       moreRow('manage-rules', 'tag', 'Merchant rules', S.rules.length + ' rules') +
       moreRow('manage-accounts', 'bank', 'Accounts', S.accounts.length + ' accounts') +
       moreRow('import', 'upload', 'Import statement', 'CSV or pasted lines') +
+      moreRow('share-data', 'upload', 'Send to Zhila', 'Share a copy by AirDrop, Messages or email') +
       moreRow('export', 'download', 'Export data', 'Download a JSON backup') +
       moreRow('restore', 'restore', 'Restore backup', 'Replaces current data') + '</div>';
-    h += '<div class="list mt12">' + moreRow('appearance', 'palette', 'Appearance', { auto: 'Automatic', light: 'Light', dark: 'Dark' }[s.theme || 'auto']) +
+    h += '<div class="list mt12">' + moreRow('appearance', 'palette', 'Appearance', { auto: 'Automatic', light: 'Light', dark: 'Dark' }[s.theme || 'auto'] + (window.LCTheme ? ' · ' + LCTheme.THEMES[LCTheme.get()].name : '')) +
       moreRow('help', 'help', 'How the numbers work') +
       moreRow('reset', 'reset', 'Reset to starting figures', 'Replaces everything with the original seed data') + '</div>';
     h += '<input type="file" id="restoreFile" accept=".json,application/json" class="sr-only">';
@@ -737,10 +701,17 @@
       toggleHtml('includeCash', 'Include manual cash', 'Off = bank-derived totals only. On = bank + manual cash', s.includeCash, true));
   }
   function openAppearance() {
-    openSheet('Appearance', '<div class="choice" id="themePick">' + [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(function (o) {
+    var cur = window.LCTheme ? LCTheme.get() : 'sand';
+    var swatches = window.LCTheme ? '<div class="field mt16"><span>Colour</span><div class="swatches" id="accentPick">' + Object.keys(LCTheme.THEMES).map(function (k) {
+      var t = LCTheme.THEMES[k];
+      return '<label><input type="radio" name="accent" value="' + k + '"' + (k === cur ? ' checked' : '') + '><span style="--sw:' + t.accent + '"><i></i>' + t.name + '</span></label>';
+    }).join('') + '</div><div class="hint">Colours Budget and the calculator keys. Sand keeps Apple’s orange keys.</div></div>' : '';
+    openSheet('Appearance', '<div class="field"><span>Mode</span></div><div class="choice" id="themePick">' + [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(function (o) {
       return '<label><input type="radio" name="theme" value="' + o[0] + '"' + ((S.settings.theme || 'auto') === o[0] ? ' checked' : '') + '><span>' + o[1] + '</span></label>';
-    }).join('') + '</div>', function (el) {
+    }).join('') + '</div>' + swatches, function (el) {
       el.querySelector('#themePick').addEventListener('change', function (e) { S.settings.theme = e.target.value; commit(); });
+      var ap = el.querySelector('#accentPick');
+      if (ap) ap.addEventListener('change', function (e) { LCTheme.set(e.target.value); render(); });
     });
   }
   function openHelp() {
@@ -1115,6 +1086,16 @@
   }
 
   // ---------- Data ----------
+  // Send a copy of everything (as a backup file) through the phone's share sheet. Zhila opens it with Restore backup.
+  function shareData() {
+    var name = 'lifecalc-budget-' + todayISO() + '.json';
+    var file;
+    try { file = new File([JSON.stringify(S)], name, { type: 'application/json' }); } catch (e) { file = null; }
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: 'LifeCalc budget', text: 'Our LifeCalc budget. Open LifeCalc → Settings → Restore backup and choose this file.' })
+        .then(function () { toast('Sent'); }).catch(function () {});
+    } else { exportData(); toast('Backup downloaded. Send the file to Zhila'); }
+  }
   function exportData() {
     var blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
     var a = document.createElement('a');
@@ -1248,6 +1229,7 @@
       S.accounts = S.accounts.filter(function (x) { return x.id !== a.id; }); persist(); render(); openAccounts(); toast('Deleted');
     },
     export: exportData,
+    'share-data': shareData,
     restore: function () { document.getElementById('restoreFile').click(); },
     reset: function () {
       if (!confirm('Reset everything to the starting figures? Imported transactions and edits will be lost. Export a backup first if unsure.')) return;
