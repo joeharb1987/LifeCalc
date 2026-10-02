@@ -374,9 +374,7 @@ button.badge { cursor: pointer; }
 .section.mt12 { margin-top: 12px; }
 .section.mt16 { margin-top: 16px; }
 
-/* Reorder mode: grips only show after tapping Edit */
-.grip { display: none; }
-.reorder .grip { display: flex; }
+/* Drag grips are always visible on sortable rows */
 
 /* Swipe left to delete */
 .swipe { position: relative; touch-action: pan-y; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
