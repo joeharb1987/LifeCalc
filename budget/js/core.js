@@ -135,12 +135,20 @@
     descriptionRaw: 'description_raw', accountId: 'account_id', categoryId: 'category_id', internalTransfer: 'internal_transfer',
     cashDeposit: 'cash_deposit', oneOff: 'one_off', signGuessed: 'sign_guessed', userEdited: 'user_edited'
   };
+  // Asset categories: an asset's `type` is one of these ids. Users can add their own.
+  function defaultAssetCats() {
+    return [['cash', 'Bank accounts & cash', 'bank'], ['kids', 'Kids savings', 'piggy'], ['super', 'Superannuation', 'umbrella'],
+      ['shares', 'Shares', 'chart'], ['crypto', 'Crypto', 'crypto'], ['property', 'Property', 'property'], ['vehicles', 'Vehicles', 'car'],
+      ['business', 'Business', 'briefcase'], ['valuables', 'Valuables', 'gem'], ['other', 'Other assets', 'tag']]
+      .map(function (c, i) { return { id: c[0], name: c[1], icon: c[2], order: i }; });
+  }
   function migrate(state) {
     var seed = root.HF.seed();
     var from = state.version || 1;
     ['categories', 'items', 'accounts', 'transactions', 'rules', 'debts', 'assets', 'nwHistory'].forEach(function (k) {
       if (!Array.isArray(state[k])) state[k] = seed[k];
     });
+    if (!Array.isArray(state.assetCats)) state.assetCats = defaultAssetCats();
     // There is no household / business split any more: everything counts.
     if (state.settings) state.settings.includeBusiness = true;
     if (from < 3) {
@@ -395,7 +403,7 @@
     money: money, uid: uid,
     parseISO: parseISO, toISO: toISO, weekStart: weekStart, periodRange: periodRange, periodKey: periodKey,
     periodLabel: periodLabel, periodShortLabel: periodShortLabel, fmtDate: fmtDate, MONTHS: MONTHS,
-    load: load, save: save, migrate: migrate,
+    load: load, save: save, migrate: migrate, defaultAssetCats: defaultAssetCats,
     catById: catById, itemIncluded: itemIncluded, excludedReason: excludedReason, isBusiness: isBusiness, isOneOff: isOneOff,
     budgetSummary: budgetSummary, cashSpendingEntered: cashSpendingEntered, upcomingChanges: upcomingChanges,
     newTransaction: newTransaction, txExcluded: txExcluded, txInRange: txInRange, actualSummary: actualSummary, history: history,

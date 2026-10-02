@@ -36,6 +36,30 @@
     reset: '<path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 4v4.5H16"/>',
     edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>',
+    property: '<path d="M3 21h18"/><path d="M5 21V8l7-4.5L19 8v13"/><path d="M9.5 21v-5h5v5"/><path d="M9 11h.01M15 11h.01"/>',
+    building: '<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M9 15h.01M15 15h.01"/><path d="M10.5 21v-3h3v3"/>',
+    umbrella: '<path d="M3 12a9 9 0 0 1 18 0Z"/><path d="M12 12v6.5a2 2 0 0 1-4 0"/><path d="M12 3v.5"/>',
+    briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2"/><path d="M3 12.5h18"/>',
+    gem: '<path d="M6.5 4h11L21 9l-9 11L3 9Z"/><path d="M3 9h18"/><path d="m9 4-1.5 5L12 20l4.5-11L15 4"/>',
+    gold: '<path d="M4.5 18 7 12h10l2.5 6Z"/><path d="M8.5 12 10 8h4l1.5 4"/>',
+    boat: '<path d="M3 16.5h18l-2.5 4h-13Z"/><path d="M12 3v13.5"/><path d="M12 4.5 18.5 14H12"/>',
+    bike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16 9.5 8.5h5L18 16M9.5 8.5 12 16h-6M14 6h2.5"/>',
+    plane: '<path d="M10.5 3.5 13.5 3.5 13.5 9.5 21 14v2l-7.5-2.5v4l2.5 2v1.5L12 20l-4 1v-1.5l2.5-2v-4L3 16v-2l7.5-4.5Z"/>',
+    gift: '<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8.5h14V12M12 8v12.5"/><path d="M12 8C10.5 4 6.5 4.5 7.5 7c.4 1 2 1 4.5 1Zm0 0c1.5-4 5.5-3.5 4.5-1-.4 1-2 1-4.5 1Z"/>',
+    paw: '<circle cx="7" cy="10" r="1.8"/><circle cx="17" cy="10" r="1.8"/><circle cx="9.8" cy="6" r="1.8"/><circle cx="14.2" cy="6" r="1.8"/><path d="M8 17.5c0-2.5 2-5 4-5s4 2.5 4 5c0 1.8-1.5 2.5-4 2-2.5.5-4-.2-4-2Z"/>',
+    phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+    dumbbell: '<path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>',
+    baby: '<circle cx="12" cy="8" r="4.5"/><path d="M10.5 8h.01M13.5 8h.01M10.5 10c1 .7 2 .7 3 0"/><path d="M6 21v-1.5a6 6 0 0 1 12 0V21"/>',
+    heart: '<path d="M12 20s-7.5-4.5-7.5-10A4.5 4.5 0 0 1 12 7.2 4.5 4.5 0 0 1 19.5 10C19.5 15.5 12 20 12 20Z"/>',
+    fuel: '<path d="M4.5 21V5a1.5 1.5 0 0 1 1.5-1.5h7A1.5 1.5 0 0 1 14.5 5v16M3 21h13"/><path d="M7 7.5h5v3.5H7z"/><path d="M14.5 10h2a1.5 1.5 0 0 1 1.5 1.5V16a1.5 1.5 0 0 0 3 0V8l-2.5-2.5"/>',
+    wrench: '<path d="M14.5 6.5a4 4 0 0 0 5 5L12 19a2.1 2.1 0 0 1-3-3l7.5-7.5"/><path d="M14.5 6.5 17 4a4 4 0 0 1 3 3l-2.5 2.5"/>',
+    book: '<path d="M4 4.5h6a2 2 0 0 1 2 2V20a1.5 1.5 0 0 0-1.5-1.5H4Z"/><path d="M20 4.5h-6a2 2 0 0 0-2 2V20a1.5 1.5 0 0 1 1.5-1.5H20Z"/>',
+    music: '<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+    coffee: '<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5Z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5v2.5M12 3.5v2.5"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9Z"/>',
+    key: '<circle cx="8" cy="15" r="4.5"/><path d="m11.5 11.5 8-8M17 6l2.5 2.5M14.5 8.5 17 11"/>',
+    star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z"/>',
+    water: '<path d="M12 3.5s-6 6.5-6 11a6 6 0 0 0 12 0c0-4.5-6-11-6-11Z"/>',
     chev: '<path d="m9 6 6 6-6 6"/>',
     back: '<path d="m15 6-6 6 6 6"/>',
     down: '<path d="m6 9 6 6 6-6"/>',
@@ -55,7 +79,8 @@
 
   // Keys offered when picking a category icon.
   var CATEGORY_ICONS = ['home', 'food', 'education', 'kids', 'car', 'bolt', 'shield', 'bag', 'health', 'scissors', 'tv', 'card', 'bank',
-    'piggy', 'laptop', 'pin', 'wallet', 'transfer', 'chart', 'coins', 'cash', 'crypto', 'tag'];
+    'piggy', 'laptop', 'pin', 'wallet', 'transfer', 'chart', 'coins', 'cash', 'crypto', 'tag',
+    'property', 'building', 'umbrella', 'briefcase', 'gem', 'gold', 'boat', 'bike', 'plane', 'gift', 'paw', 'phone', 'dumbbell', 'baby', 'heart', 'fuel', 'wrench', 'book', 'music', 'coffee', 'globe', 'key', 'star', 'water'];
 
   function icon(key, size, extra) {
     var p = P[key];
