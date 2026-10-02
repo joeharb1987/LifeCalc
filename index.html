@@ -46,16 +46,16 @@ body.dark{
   --bg:#000000;
   --text:#FFFFFF;
   --text-dim:#8E8E93;
-  --digit:#333335;
+  --digit:#323234;
   --digit-text:#FFFFFF;
   --fn:#5C5C5F;
   --fn-text:#FFFFFF;
   --sci:#1F1F21;
   --sci-text:#FFFFFF;
-  --op:#FF9F0A;
+  --op:#F19A38;
   --op-text:#FFFFFF;
   --op-active-bg:#FFFFFF;
-  --op-active-text:#FF9F0A;
+  --op-active-text:#F19A38;
   --digit-press:#737375;
   --fn-press:#9A9A9D;
   --sci-press:#4A4A4D;
@@ -80,7 +80,9 @@ button{cursor:pointer;}
 }
 
 /* ---------- Top bar ---------- */
-.topbar{display:flex;align-items:center;justify-content:space-between;min-height:44px;flex:0 0 auto;}
+.topbar{display:flex;align-items:center;justify-content:space-between;min-height:50px;flex:0 0 auto;}
+.round-btn{width:46px;height:46px;border:0;border-radius:50%;background:#1C1C1E;color:#fff;display:grid;place-items:center;padding:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.08);}
+.round-btn svg{width:24px;height:24px;}
 .icon-btn{width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:var(--op);display:grid;place-items:center;padding:0;}
 .icon-btn svg{width:24px;height:24px;}
 .topbar-title{font-size:17px;font-weight:600;}
@@ -103,24 +105,26 @@ button{cursor:pointer;}
 .pad[hidden]{display:none;}
 
 button.key{border:0;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0;
-  background:var(--digit);color:var(--digit-text);box-shadow:var(--shadow);
+  background:var(--digit);background-image:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 60%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 0 0 1px rgba(255,255,255,.05)!important;color:var(--digit-text);box-shadow:var(--shadow);
   font-size:calc(var(--key) * .42);font-weight:400;line-height:1;transition:filter .25s ease, background-color .2s ease, color .2s ease;}
 button.key:active,button.key.pressed{background:var(--digit-press);transition:none;}
 .k-fn:active,.k-fn.pressed{background:var(--fn-press)!important;}
 .k-op:active,.k-op.pressed,.k-eq:active,.k-eq.pressed{background:var(--op-press)!important;}
 .k-sci:active,.k-sci.pressed{background:var(--sci-press)!important;}
-.k-fn{background:var(--fn)!important;color:var(--fn-text)!important;font-size:calc(var(--key) * .36)!important;}
-.k-op,.k-eq{background:var(--op)!important;color:var(--op-text)!important;font-size:calc(var(--key) * .48)!important;font-weight:500!important;}
+.k-fn{background:linear-gradient(180deg,#6E6E70,#575759)!important;color:var(--fn-text)!important;font-size:calc(var(--key) * .36)!important;}
+.k-op,.k-eq{background:linear-gradient(180deg,#F5A447,#EE9330)!important;color:var(--op-text)!important;font-size:calc(var(--key) * .48)!important;font-weight:500!important;}
 button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:var(--op-active-text)!important;}
 .k-sci{background:var(--sci)!important;color:var(--sci-text)!important;font-size:calc(var(--key) * .26)!important;}
 .k-sci.k-sci-op{color:var(--op)!important;}
 .key svg{width:42%;height:42%;}
 .k-fn svg{width:44%;height:44%;}
+.key[data-act="sign"] svg{width:46%;height:46%;}
 .key sup{font-size:.6em;line-height:0;position:relative;top:-.5em;margin-left:1px;vertical-align:baseline;}
 
 /* ---------- Mode menu (bottom-left calculator key) ---------- */
 .mode-menu{position:absolute;z-index:30;min-width:220px;background:var(--sheet);border-radius:14px;overflow:hidden;
-  box-shadow:0 12px 40px rgba(0,0,0,.35);border:1px solid var(--line);transform-origin:bottom left;animation:menuIn .16s ease-out;}
+  box-shadow:0 12px 40px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);transform-origin:top right;border-radius:24px;animation:menuIn .16s ease-out;}
 .mode-menu[hidden]{display:none;}
 @keyframes menuIn{from{opacity:0;transform:scale(.92);}to{opacity:1;transform:none;}}
 .mode-menu button{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;color:var(--text);
@@ -128,7 +132,9 @@ button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:v
 .mode-menu button:first-child{border-top:0;}
 .mode-menu button .tick{width:18px;color:var(--op);font-weight:700;visibility:hidden;}
 .mode-menu button.active .tick{visibility:visible;}
-.mode-menu .sep{height:8px;background:var(--line);opacity:.5;}
+.mode-menu .sep{height:1px;background:rgba(255,255,255,.12);margin:2px 16px;}
+.mode-menu .mi{width:32px;text-align:center;font-size:16px;color:var(--text);opacity:.9;}
+.mode-menu button{border-top:0!important;padding:12px 18px!important;}
 
 /* ---------- History ---------- */
 .history-panel{position:absolute;inset:0 0 6px;display:none;flex-direction:column;padding:14px 16px;border-radius:20px;
@@ -183,11 +189,11 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
 <body class="dark">
 <div class="app" id="calcApp">
   <div class="topbar">
-    <button class="icon-btn" id="historyBtn" aria-label="History">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".6" fill="currentColor"/><circle cx="3.5" cy="12" r=".6" fill="currentColor"/><circle cx="3.5" cy="18" r=".6" fill="currentColor"/></svg>
+    <button class="round-btn" id="historyBtn" aria-label="History">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5H8.5"/></svg>
     </button>
     <div class="topbar-title" id="modeTitle"></div>
-    <button class="done-btn" id="convertDone" hidden>Done</button>
+    <button class="round-btn" id="modeMenuBtn" data-act="menu" aria-label="Calculator mode" aria-haspopup="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg></button>
   </div>
 
   <div class="paste-overlay" id="pasteOverlay">
@@ -221,8 +227,8 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   </div>
 
   <div class="pad basic" id="padBasic">
+    <button class="key k-fn" data-act="back" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 5H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9.2a2 2 0 0 1-1.5-.7L2.5 12l5.2-6.3A2 2 0 0 1 9.2 5Z"/><path d="m11.5 9.5 5 5M16.5 9.5l-5 5"/></svg></button>
     <button class="key k-fn" data-act="clear" aria-label="All clear">AC</button>
-    <button class="key k-fn" data-act="sign" aria-label="Plus minus"><span style="font-size:.82em;letter-spacing:-.04em">+/&minus;</span></button>
     <button class="key k-fn" data-act="percent" aria-label="Percent">%</button>
     <button class="key k-op" data-act="op" data-val="&divide;" aria-label="Divide">&divide;</button>
 
@@ -241,21 +247,17 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     <button class="key" data-act="digit" data-val="3">3</button>
     <button class="key k-op" data-act="op" data-val="+" aria-label="Plus">+</button>
 
-    <button class="key" data-act="menu" id="modeMenuBtn" aria-label="Calculator mode" aria-haspopup="menu">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg>
-    </button>
+    <button class="key" data-act="sign" aria-label="Plus minus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3 6.5h6M6 3.5v6M17 4 7 20M15 17.5h6"/></svg></button>
     <button class="key" data-act="digit" data-val="0">0</button>
     <button class="key" data-act="decimal" aria-label="Decimal point">.</button>
     <button class="key k-eq" data-act="equals" aria-label="Equals">=</button>
   </div>
 
   <div class="mode-menu" id="modeMenu" role="menu" hidden>
-    <button id="modeBasic" class="active" role="menuitemradio"><span class="tick">&#10003;</span>Basic</button>
-    <button id="modeSci" role="menuitemradio"><span class="tick">&#10003;</span>Scientific</button>
-    <button id="modeConvert" role="menuitemradio"><span class="tick">&#10003;</span>Convert</button>
+    <button id="modeBasic" class="active" role="menuitemradio"><span class="tick">&#10003;</span><span class="mi">&plusmn;&divide;</span>Basic</button>
+    <button id="modeSci" role="menuitemradio"><span class="tick">&#10003;</span><span class="mi"><i>f</i>(x)</span>Scientific</button>
     <div class="sep"></div>
-    <button id="themeDark" role="menuitemradio"><span class="tick">&#10003;</span>Dark</button>
-    <button id="themeLight" role="menuitemradio"><span class="tick">&#10003;</span>Light</button>
+    <button id="modeConvert" role="menuitemradio"><span class="tick">&#10003;</span><span class="mi">&#8646;</span>Convert</button>
   </div>
 
   <div class="convert-panel" id="padConvert" hidden>
@@ -486,15 +488,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   // Top-left key: delete while there is something to delete, AC otherwise (iOS 18).
   var DELETE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 5H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9.2a2 2 0 0 1-1.5-.7L2.5 12l5.2-6.3A2 2 0 0 1 9.2 5Z"/><path d="m11.5 9.5 5 5M16.5 9.5l-5 5"/></svg>';
   function clearLabel(){ return (!display || justEvaluated) ? 'AC' : 'DEL'; }
-  function updateClearLabel(){
-    var label = clearLabel();
-    document.querySelectorAll('[data-act="clear"]').forEach(function(btn){
-      if (btn.getAttribute('data-label') === label) return;
-      btn.setAttribute('data-label', label);
-      btn.innerHTML = label === 'AC' ? 'AC' : DELETE_ICON;
-      btn.setAttribute('aria-label', label === 'AC' ? 'All clear' : 'Delete');
-    });
-  }
+  function updateClearLabel(){}                  // iOS 26 has separate AC and delete keys
 
   function resetRepeat(){ repeatOp = null; repeatOperand = null; }
 
@@ -856,8 +850,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
         case 'sign': handleSign(); break;
         case 'percent': handlePercent(); break;
         case 'back': handleBack(); break;
-        case 'clear': if (clearLabel() === 'AC') handleClear(); else handleBack(); break;
-        case 'menu': toggleMenu(); break;
+        case 'clear': handleClear(); break;
         case 'equals': handleEquals(); break;
       }
     });
@@ -879,7 +872,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   })();
 
   var padSciEl = padSci, modeMenu = document.getElementById('modeMenu'), modeMenuBtn = document.getElementById('modeMenuBtn');
-  var modeTitle = document.getElementById('modeTitle'), convertDone = document.getElementById('convertDone');
+  var modeTitle = document.getElementById('modeTitle');
 
   function setMode(mode){
     currentMode = mode;
@@ -892,7 +885,6 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     padConvert.hidden = calc;
     displayPanel.style.display = calc ? '' : 'none';
     historyBtn.style.visibility = calc ? '' : 'hidden';
-    convertDone.hidden = calc;
     modeTitle.textContent = calc ? '' : 'Convert';
     try { localStorage.setItem('calc_mode_v5', mode); } catch (e) {}
     closeMenu();
@@ -904,8 +896,9 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   function openMenu(){
     modeMenu.hidden = false;
     var app = document.getElementById('calcApp').getBoundingClientRect(), k = modeMenuBtn.getBoundingClientRect();
-    modeMenu.style.left = (k.left - app.left) + 'px';
-    modeMenu.style.top = Math.max(8, k.top - app.top - modeMenu.offsetHeight - 10) + 'px';
+    modeMenu.style.left = 'auto';
+    modeMenu.style.right = (app.right - k.right) + 'px';
+    modeMenu.style.top = (k.top - app.top) + 'px';     // drops down over the button, as on iOS
   }
   function closeMenu(){ modeMenu.hidden = true; }
   function toggleMenu(){ if (modeMenu.hidden) openMenu(); else closeMenu(); }
@@ -916,7 +909,7 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
   modeBasic.addEventListener('click', function(){ setMode('basic'); });
   modeSci.addEventListener('click', function(){ setMode('sci'); });
   modeConvert.addEventListener('click', function(){ setMode('convert'); });
-  convertDone.addEventListener('click', function(){ setMode('basic'); });
+  modeMenuBtn.addEventListener('click', function(e){ e.stopPropagation(); toggleMenu(); });
 
   // Size the round keys so the keypad always fits between the display and the tab bar.
   function layout(){
@@ -1220,21 +1213,8 @@ body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
     return convResultValue.textContent;
   });
 
-  // Theme — dark by default, like the iPhone Calculator.
-  var themeDark = document.getElementById('themeDark'), themeLight = document.getElementById('themeLight');
-  function applyTheme(theme){
-    document.body.classList.toggle('dark', theme === 'dark');
-    themeDark.classList.toggle('active', theme === 'dark');
-    themeLight.classList.toggle('active', theme !== 'dark');
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#000000' : '#F2F2F7');
-    try { localStorage.setItem('calc_theme_v5', theme); } catch (e) {}
-  }
-  var savedTheme = 'dark';
-  try { savedTheme = localStorage.getItem('calc_theme_v5') || 'dark'; } catch (e) {}
-  applyTheme(savedTheme);
-  themeDark.addEventListener('click', function(){ applyTheme('dark'); closeMenu(); });
-  themeLight.addEventListener('click', function(){ applyTheme('light'); closeMenu(); });
+  // Always dark, like the iPhone Calculator.
+  document.body.classList.add('dark');
 
   // Pinch zoom is blocked; double-tap zoom is already off via touch-action: manipulation.
   document.addEventListener('gesturestart',function(e){e.preventDefault();},{passive:false});
