@@ -4,6 +4,9 @@ LifeCalc — calculator (home screen) + Budget tab
 - budget/             household budget: Budget, Transactions, Debts, More (see budget/README.md)
 - service-worker.js   one worker for both; network-first so updates show up straight away
 - manifest.json       one installable app
+- lifecalc-icon-*.png icons: 180 = apple-touch-icon, 192 / 512 = manifest,
+                      1024 = master kept for the future native app
+- lifecalc-icon.svg   favicon (vector redraw of the 1024 master)
 
 The old Money / Finance / Wealth placeholder screens were removed; the Budget tab replaces them.
 

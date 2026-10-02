@@ -1,13 +1,14 @@
 // One service worker for all of LifeCalc (calculator + /budget).
 // Network-first so updates pushed to GitHub Pages show up straight away; the cache is the offline fallback.
-const CACHE_NAME = "lifecalc-v13";
+const CACHE_NAME = "lifecalc-v14";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./icons/apple-touch-icon.png",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
+  "./lifecalc-icon.svg",
+  "./lifecalc-icon-180.png",
+  "./lifecalc-icon-192.png",
+  "./lifecalc-icon-512.png",
   "./budget/",
   "./budget/index.html",
   "./budget/styles.css",
