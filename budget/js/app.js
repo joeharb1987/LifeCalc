@@ -59,15 +59,14 @@
   function top(title, opts) {
     opts = opts || {};
     return '<header class="top">' + (opts.back ? '<button class="icon-btn" data-act="back" aria-label="Back">' + icon('back', 22) + '</button>' : '') +
-      '<div style="flex:1;min-width:0"><h1>' + esc(title) + '</h1>' + (opts.sub ? '<div class="sub">' + opts.sub + '</div>' : '') + '</div>' + (opts.actions || '') + '</header>';
+      '<div style="flex:1;min-width:0"><h1>' + esc(title) + '</h1>' + (opts.sub ? '<div class="sub">' + opts.sub + '</div>' : '') + '</div>' + (opts.actions || '') +
+      '<button class="icon-btn" data-act="app-menu" aria-label="Menu" aria-haspopup="menu">' + icon('calc', 22) + '</button></header>';
   }
   function emptyBlock(ic, title, text, actions) {
     return '<div class="empty"><div class="ico">' + icon(ic, 22) + '</div><h3>' + esc(title) + '</h3><p>' + esc(text) + '</p>' + (actions || '') + '</div>';
   }
 
   // ---------- Render ----------
-  // Same five items as the calculator's bar; Calc is LifeCalc's home screen.
-  var NAV = [['calc', 'Calc', 'calc'], ['budget', 'Budget', 'pie'], ['transactions', 'Transactions', 'transfer'], ['debts', 'Debts', 'card'], ['more', 'More', 'dots']];
   var TABS = ['budget', 'transactions', 'debts', 'more'];
   var PAGE_TAB = { category: 'budget', networth: 'more', reports: 'more' };
   function render() {
@@ -79,13 +78,32 @@
     if (ui.page) html = { category: renderCategory, networth: renderNetWorth, reports: renderReports }[ui.page.name]();
     else html = { budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab]();
     $app.innerHTML = html;
-    var active = ui.page ? (ui.page.from || PAGE_TAB[ui.page.name]) : tab;
-    document.getElementById('navInner').innerHTML = NAV.map(function (n) {
-      if (n[0] === 'calc') return '<a href="../">' + icon(n[2], 23) + '<span>' + n[1] + '</span></a>';
-      return '<button class="' + (n[0] === active ? 'on' : '') + '" data-act="tab" data-val="' + n[0] + '" aria-current="' + (n[0] === active ? 'page' : 'false') + '">' + icon(n[2], 23) + '<span>' + n[1] + '</span></button>';
-    }).join('');
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
   }
+  // Top-right menu (same on the calculator): calculator modes, then Budget, Debts, Settings.
+  function closeAppMenu(){ var m = document.getElementById('appMenu'); if (m) m.remove(); }
+  function openAppMenu(btn){
+    closeAppMenu();
+    var tab = ui.page ? (ui.page.from || PAGE_TAB[ui.page.name]) : S.settings.tab;
+    var item = function(label, mi, attrs, on){ return '<' + (attrs.href ? 'a' : 'button') + ' role="menuitem" class="' + (on ? 'on' : '') + '" ' +
+      Object.keys(attrs).map(function(k){ return k + '="' + attrs[k] + '"'; }).join(' ') + '><span class="tick">✓</span><span class="mi">' + mi + '</span>' + label + '</' + (attrs.href ? 'a' : 'button') + '>'; };
+    var m = document.createElement('div');
+    m.id = 'appMenu'; m.className = 'app-menu'; m.setAttribute('role', 'menu');
+    m.innerHTML = item('Basic', '±÷', { href: '../#basic' }) + item('Scientific', '<i>f</i>(x)', { href: '../#sci' }) + item('Convert', '⇆', { href: '../#convert' }) +
+      '<div class="sep"></div>' +
+      item('Budget', icon('pie', 18), { 'data-act': 'tab', 'data-val': 'budget' }, tab === 'budget') +
+      item('Debts', icon('card', 18), { 'data-act': 'tab', 'data-val': 'debts' }, tab === 'debts') +
+      item('Settings', icon('gear', 18), { 'data-act': 'tab', 'data-val': 'more' }, tab === 'more' || tab === 'transactions');
+    document.body.appendChild(m);
+    var r = btn.getBoundingClientRect();
+    m.style.top = (r.bottom + 6) + 'px';
+    m.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+  }
+  document.addEventListener('click', function(e){
+    var m = document.getElementById('appMenu');
+    if (m && !m.contains(e.target) && !e.target.closest('[data-act="app-menu"]')) closeAppMenu();
+  }, true);
+
   function go(page) { page.from = ui.page ? ui.page.from : (S.settings.tab || 'budget'); ui.page = page; render(); window.scrollTo(0, 0); }
 
   // ===================== SHARED SUMMARY =====================
@@ -610,9 +628,10 @@
   }
   function renderMore() {
     var s = S.settings;
-    var h = top('More');
+    var h = top('Settings');
     h += '<button class="card profile" data-act="profile" style="width:100%;text-align:left"><div class="avatar">' + esc(initials(s.householdName || s.userName)) + '</div><div style="flex:1"><b>' + esc(s.householdName || 'Household') + '</b><span class="muted small">Household account · ' + esc(s.userName || '') + '</span></div>' + icon('chev', 18, 'chev') + '</button>';
     h += '<div class="list mt12">' +
+      moreRow('tab', 'transfer', 'Transactions', S.transactions.length + ' imported and cash entries', ' data-val="transactions"') +
       moreRow('settings', 'gear', 'Household settings', 'Business / trust and manual cash in totals') +
       moreRow('page', 'chart', 'Net Worth', 'Assets minus all debts', ' data-val="networth"') +
       moreRow('page', 'report', 'Reports', 'Actual in vs out over time', ' data-val="reports"') +
@@ -1043,7 +1062,8 @@
   // ---------- Events ----------
   function confirmDel(what) { return confirm('Delete ' + what + '? This can’t be undone.'); }
   var actions = {
-    tab: function (b, e) { e.preventDefault(); ui.page = null; S.settings.tab = b.dataset.val; closeSheet(true); commit(); window.scrollTo(0, 0); },
+    'app-menu': function (b) { if (document.getElementById('appMenu')) closeAppMenu(); else openAppMenu(b); },
+    tab: function (b, e) { e.preventDefault(); closeAppMenu(); ui.page = null; S.settings.tab = b.dataset.val; closeSheet(true); commit(); window.scrollTo(0, 0); },
     page: function (b) { closeSheet(true); if (b.dataset.val === 'category') ui.catTab = 'items'; go({ name: b.dataset.val, id: b.dataset.id }); },
     back: function () { ui.page = null; render(); window.scrollTo(0, 0); },
     set: function (b) {
@@ -1142,7 +1162,7 @@
       if (s) { s.focus(); s.setSelectionRange(pos, pos); }
     }
   });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeSheet(); closeAppMenu(); } });
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', function () { navigator.serviceWorker.register('../service-worker.js', { scope: '../' }).catch(function () {}); });

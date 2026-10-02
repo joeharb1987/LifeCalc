@@ -76,7 +76,7 @@ button{cursor:pointer;}
 
 .app{
   position:relative;width:100%;max-width:480px;height:100dvh;margin:0 auto;display:flex;flex-direction:column;
-  padding:calc(env(safe-area-inset-top) + 6px) 16px calc(env(safe-area-inset-bottom) + 64px);
+  padding:calc(env(safe-area-inset-top) + 6px) 16px calc(env(safe-area-inset-bottom) + 14px);
 }
 
 /* ---------- Top bar ---------- */
@@ -143,6 +143,9 @@ button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:v
 .mode-menu .sep{height:1px;background:rgba(255,255,255,.12);margin:2px 16px;}
 .mode-menu .mi{width:32px;text-align:center;font-size:16px;color:var(--text);opacity:.9;}
 .mode-menu button{border-top:0!important;padding:12px 18px!important;}
+.mode-menu a{display:flex;align-items:center;gap:12px;color:var(--text);text-decoration:none;padding:12px 18px;font-size:17px;}
+.mode-menu a .tick{width:18px;visibility:hidden;}
+.mode-menu .mi svg{display:block;margin:0 auto;}
 
 /* ---------- History ---------- */
 .history-panel{position:absolute;inset:0 0 6px;display:none;flex-direction:column;padding:14px 16px;border-radius:20px;
@@ -183,16 +186,7 @@ button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:v
 .conv-result .r-unit{color:var(--text-dim);font-size:15px;}
 .conv-result .r-value{font-size:56px;font-weight:300;letter-spacing:-.03em;white-space:nowrap;overflow:hidden;}
 
-/* ---------- Shared LifeCalc bottom bar (same items as the Budget pages) ---------- */
-.lc-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--top-btn);border-top:1px solid var(--key-border);
-  padding-bottom:env(safe-area-inset-bottom);}
-body.dark .lc-tabbar{background:#000;border-top-color:rgba(255,255,255,.08);}
 html{background:#000;}
-.lc-tabbar-inner{max-width:480px;margin:0 auto;height:54px;display:grid;grid-template-columns:repeat(5,1fr);}
-.lc-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--text-dim);
-  text-decoration:none;font-size:11px;font-weight:600;}
-.lc-tabbar a.on{color:var(--amber);}
-.lc-tabbar svg{width:22px;height:22px;}
 </style>
 </head>
 <body class="dark">
@@ -292,6 +286,10 @@ html{background:#000;}
     <button id="modeSci" role="menuitemradio"><span class="tick">&#10003;</span><span class="mi"><i>f</i>(x)</span>Scientific</button>
     <div class="sep"></div>
     <button id="modeConvert" role="menuitemradio"><span class="tick">&#10003;</span><span class="mi">&#8646;</span>Convert</button>
+    <div class="sep"></div>
+    <a href="./budget/#budget" role="menuitem"><span class="tick">&#10003;</span><span class="mi"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg></span>Budget</a>
+    <a href="./budget/#debts" role="menuitem"><span class="tick">&#10003;</span><span class="mi"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6.5 15h3"/></svg></span>Debts</a>
+    <a href="./budget/#more" role="menuitem"><span class="tick">&#10003;</span><span class="mi"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span>Settings</a>
   </div>
 
   <div class="convert-panel" id="padConvert" hidden>
@@ -1458,7 +1456,13 @@ html{background:#000;}
   try { savedMode = localStorage.getItem('calc_mode_v5') || 'basic'; } catch (e) {}
   updateMemoryKey();
   updateAngleKey();
+  var hashMode = location.hash.slice(1);
+  if (/^(basic|sci|convert)$/.test(hashMode)) { savedMode = hashMode; window.history.replaceState(null, '', location.pathname); }
   setMode(/^(basic|sci|convert)$/.test(savedMode) ? savedMode : 'basic');
+  window.addEventListener('hashchange', function(){
+    var h = location.hash.slice(1);
+    if (/^(basic|sci|convert)$/.test(h)) { setMode(h); window.history.replaceState(null, '', location.pathname); }
+  });
   updateDisplay();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
 })();
@@ -1492,12 +1496,5 @@ if ("serviceWorker" in navigator) {
 })();
 </script>
 
-<nav class="lc-tabbar" aria-label="Main"><div class="lc-tabbar-inner">
-  <a href="./" class="on" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg><span>Calc</span></a>
-  <a href="./budget/#budget"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg><span>Budget</span></a>
-  <a href="./budget/#transactions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-3.5-3.5"/><path d="M20 16H6l3.5 3.5"/></svg><span>Transactions</span></a>
-  <a href="./budget/#debts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6.5 15h3"/></svg><span>Debts</span></a>
-  <a href="./budget/#more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg><span>More</span></a>
-</div></nav>
 </body>
 </html>
