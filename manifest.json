@@ -1,7 +1,7 @@
 {
-  "name": "Calc",
-  "short_name": "Calc",
-  "description": "Calculator and unit converter",
+  "name": "LifeCalc",
+  "short_name": "LifeCalc",
+  "description": "Calculator, converter and household budget",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -10,12 +10,12 @@
   "theme_color": "#F5F1E7",
   "icons": [
     {
-      "src": "./icons/icon-192.png",
+      "src": "./lifecalc-icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "./icons/icon-512.png",
+      "src": "./lifecalc-icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
