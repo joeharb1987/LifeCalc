@@ -20,7 +20,7 @@
   --deep-ink: #F3EFE8;
   --shadow: 0 1px 2px rgba(22, 35, 58, .04), 0 8px 24px rgba(22, 35, 58, .05);
   --radius: 18px;
-  --nav-h: 54px;
+  --nav-h: 0px;
   --serif: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
   color-scheme: light;
 }
@@ -284,8 +284,17 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .nav button.on { color: var(--accent-ink); }
 .nav a { color: var(--muted); }
 
-.toast { position: fixed; left: 50%; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 14px); transform: translate(-50%, 10px); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 600; opacity: 0; pointer-events: none; transition: .2s; z-index: 60; max-width: calc(100% - 32px); text-align: center; }
+.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); transform: translate(-50%, 10px); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 600; opacity: 0; pointer-events: none; transition: .2s; z-index: 60; max-width: calc(100% - 32px); text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mt8 { margin-top: 8px; } .mt12 { margin-top: 12px; } .mt16 { margin-top: 16px; }
 .right { text-align: right; }
+
+/* ---------- App menu (top-right button on every page, same as the calculator) ---------- */
+.app-menu { position: fixed; z-index: 70; min-width: 230px; background: var(--card); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 16px 40px rgba(22,35,58,.18); padding: 6px 0; animation: menuIn .16s ease-out; transform-origin: top right; }
+@keyframes menuIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+.app-menu a, .app-menu button { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: transparent; color: var(--ink); text-decoration: none; padding: 11px 18px; font-size: 16px; text-align: left; }
+.app-menu .tick { width: 16px; color: var(--accent-ink); font-weight: 700; visibility: hidden; }
+.app-menu .on .tick { visibility: visible; }
+.app-menu .mi { width: 34px; display: grid; place-items: center; color: var(--ink-2); font-size: 15px; white-space: nowrap; }
+.app-menu .sep { height: 1px; background: var(--line); margin: 4px 16px; }
