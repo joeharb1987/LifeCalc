@@ -567,19 +567,36 @@
     h += pts.length >= 2 ? '<div class="mt12">' + lineChart('nwChart', pts) + '</div>' : '<p class="muted small" style="margin:12px 0 0">The chart builds up as you update balances — one point per day something changes.</p>';
     h += '<div class="range">' + ['1M', '3M', '6M', '1Y', 'All'].map(function (r) { return '<button class="' + (ui.nwRange === r ? 'on' : '') + '" data-act="nw-range" data-val="' + r + '">' + r + '</button>'; }).join('') + '</div></div>';
 
+    var activeDebts = byOrder(S.debts).filter(function (d) { return d.active !== false; });
     h += '<div class="list mt16">' +
-      '<button class="row" data-act="page" data-val="assets"><div class="ico">' + icon('bank', 20) + '</div><div class="main"><div class="name">Assets</div><div class="sub">' + S.assets.length + ' accounts &amp; holdings</div></div><div class="amt num">' + money(nw.assets, { dp: 0 }) + '</div>' + icon('chev', 18, 'chev') + '</button>' +
-      '<button class="row" data-act="page" data-val="debts"><div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">Debts</div><div class="sub">' + S.debts.filter(function (d) { return d.active !== false; }).length + ' active' + (nw.missing.length ? ' · ' + nw.missing.length + ' without balance' : '') + '</div></div><div class="amt num neg">−' + money(nw.liabilities, { dp: 0 }) + '</div>' + icon('chev', 18, 'chev') + '</button>' +
+      nwSection('nw_a', 'bank', 'Assets', S.assets.length + ' accounts &amp; holdings', money(nw.assets, { dp: 0 }), '',
+        '<div class="grp-body" data-sort-list="assetcats">' + assetGroups() + '</div>',
+        '<button class="link" data-act="add-asset">' + icon('plus', 16) + ' Add asset</button>') +
+      nwSection('nw_d', 'card', 'Debts', activeDebts.length + ' active' + (nw.missing.length ? ' · ' + nw.missing.length + ' without balance' : ''), '−' + money(nw.liabilities, { dp: 0 }), 'neg',
+        '<div class="grp-body" data-sort-list="debts">' + activeDebts.map(debtRow).join('') + '</div>',
+        '<button class="link" data-act="add-debt">' + icon('plus', 16) + ' Add debt</button>') +
       '<div class="row nw-total"><div class="main"><div class="name">Net worth</div><div class="sub">Assets − debts</div></div><div class="amt num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div></div></div>';
     if (nw.missing.length) h += '<div class="note"><b>Not yet subtracted:</b> ' + nw.missing.map(function (d) { return esc(d.name); }).join(', ') + ' — no balance set yet. Tap Debts to add them.</div>';
     return h;
+  }
+  // A collapsible Net Worth section (tap to open in place).
+  function nwSection(key, ic, name, sub, amt, cls, body, foot) {
+    var open = ui.open[key];
+    return '<div class="grp' + (open ? ' open' : '') + '"><div class="row cat-row" role="button" tabindex="0" aria-expanded="' + !!open + '" data-act="toggle" data-id="' + key + '"><div class="ico">' + icon(ic, 20) + '</div>' +
+      '<div class="main"><div class="name">' + name + '</div><div class="sub">' + sub + '</div></div><div class="amt num ' + cls + '">' + amt + '</div>' + icon('chev', 18, 'chev') + '</div>' +
+      (open ? body + '<div class="grp-foot">' + foot + '</div>' : '') + '</div>';
   }
   function renderAssets() {
     var nw = HF.netWorth(S);
     var h = top('Assets', { back: true, actions: '<button class="icon-btn" data-act="add-asset" aria-label="Add asset">' + icon('plus', 22) + '</button>' });
     h += '<div class="card hero"><div class="lbl">Total assets</div><div class="big num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts &amp; holdings</div></div>';
-    h += '<div class="list mt16">';
-    h = h.replace('<div class="list mt16">', '<div class="list mt16" data-sort-list="assetcats">');
+    h += '<div class="list mt16" data-sort-list="assetcats">' + assetGroups();
+    h += '</div><button class="btn soft block mt12" data-act="add-asset">' + icon('plus', 18) + ' Add asset</button>';
+    h += '<p class="muted small" style="margin:10px 4px">Market values change — update them when you check.</p>';
+    return h;
+  }
+  function assetGroups() {
+    var h = '';
     assetCats().forEach(function (g) {
       var list = assetsIn(g.id);
       if (!list.length) return;
@@ -589,8 +606,6 @@
         (open ? '<div class="grp-body" data-sort-list="assets:' + g.id + '">' + list.map(assetRow).join('') + '</div>' +
           '<div class="grp-foot"><button class="link" data-act="add-asset" data-type="' + g.id + '">' + icon('plus', 16) + ' Add</button><button class="link" data-act="edit-assetcat" data-id="' + g.id + '">' + icon('edit', 14) + ' Edit category</button></div>' : '') + '</div>';
     });
-    h += '</div><button class="btn soft block mt12" data-act="add-asset">' + icon('plus', 18) + ' Add asset</button>';
-    h += '<p class="muted small" style="margin:10px 4px">Market values change — update them when you check.</p>';
     return h;
   }
   function assetRow(a) {

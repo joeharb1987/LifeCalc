@@ -302,7 +302,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* Expandable categories + drag to reorder */
 .grp .cat-row { cursor: pointer; }
 .grp .cat-row .chev { transition: transform .18s ease; }
-.grp.open .cat-row .chev { transform: rotate(90deg); }
+.grp.open > .cat-row .chev { transform: rotate(90deg); }
 .grp-body { background: var(--sunken); }
 .grp-body > .row { padding-left: 10px; }
 .grp-foot { display: flex; justify-content: space-between; align-items: center; padding: 4px 16px 6px; background: var(--sunken); border-top: 1px solid var(--line); }
@@ -323,3 +323,6 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .icon-choice span { display: inline-flex; align-items: center; gap: 6px; }
 .icon-choice .ic { flex: 0 0 auto; }
 #newCat[hidden] { display: none; }
+/* Groups nested inside an open section (Net Worth → Assets) */
+.grp-body .grp > .cat-row { padding-left: 20px; }
+.grp-body .grp-body > .row { padding-left: 30px; }
