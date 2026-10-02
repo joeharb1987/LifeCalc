@@ -141,6 +141,8 @@
     ['categories', 'items', 'accounts', 'transactions', 'rules', 'debts', 'assets', 'nwHistory'].forEach(function (k) {
       if (!Array.isArray(state[k])) state[k] = seed[k];
     });
+    // There is no household / business split any more: everything counts.
+    if (state.settings) state.settings.includeBusiness = true;
     if (from < 3) {
       // V3 swapped emoji category icons for line-icon keys.
       var seedIcons = {};

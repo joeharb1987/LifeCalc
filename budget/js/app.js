@@ -3,6 +3,7 @@
   'use strict';
   var HF = window.HF, IM = HF.importer, icon = HF.icon;
   var S = HF.load() || HF.seed();
+  S.settings.includeBusiness = true;
   var ui = {
     page: null,               // sub-page over a tab: { name: 'category'|'networth'|'reports', id, from }
     open: {}, ovOpen: {}, ovMode: 'amount', actualOffset: 0,
@@ -28,6 +29,14 @@
   }
   function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
   function cat(id) { return HF.catById(S, id); }
+  function grip() { return '<span class="grip" aria-label="Drag to reorder">' + icon('grip', 18) + '</span>'; }
+  // Items in a category, in the order the user dragged them into.
+  function catItems(catId) {
+    return S.items.map(function (it, i) { return { it: it, i: i }; })
+      .filter(function (x) { return x.it.direction === 'out' && x.it.categoryId === catId; })
+      .sort(function (a, b) { return (a.it.order != null ? a.it.order : 1e6 + a.i) - (b.it.order != null ? b.it.order : 1e6 + b.i); })
+      .map(function (x) { return x.it; });
+  }
   function sortedCats() { return S.categories.slice().sort(function (a, b) { return a.order - b.order; }); }
   function expenseCats() { return sortedCats().filter(function (c) { return c.type !== 'income' && c.type !== 'transfer' && c.type !== 'investment'; }); }
   function num(v) { var n = parseFloat(String(v).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? 0 : n; }
@@ -51,7 +60,6 @@
       return '<button role="tab" aria-selected="' + on + '" class="' + (on ? 'on' : '') + '" data-act="set" data-key="' + key + '" data-val="' + o[0] + '">' + o[1] + '</button>';
     }).join('') + '</div>';
   }
-  function scopeSeg() { return seg('includeBusiness', [['false', 'Household'], ['true', '+ Business']], String(!!S.settings.includeBusiness), 'sm'); }
   function miniBtns(kind, id) {
     return '<div class="mini-btns"><button class="mini" data-act="edit-' + kind + '" data-id="' + id + '" aria-label="Edit">' + icon('edit', 15) + '</button>' +
       '<button class="mini" data-act="del-' + kind + '" data-id="' + id + '" aria-label="Delete">' + icon('trash', 15) + '</button></div>';
@@ -125,7 +133,7 @@
     var s = S.settings;
     var h = top('Budget', { sub: greeting() + ', ' + esc(s.userName || 'there'), actions: '<button class="icon-btn" data-act="overview" aria-label="Expense overview">' + icon('dots', 22) + '</button>' });
     h += '<div class="controls">' + seg('view', [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']], s.view) +
-      '<div class="row2">' + seg('mode', [['budget', 'Budget'], ['actual', 'Actual']], s.mode, 'sm') + scopeSeg() + '</div></div>';
+      '<div class="row2">' + seg('mode', [['budget', 'Budget'], ['actual', 'Actual']], s.mode, 'sm') + '</div></div>';
     if (s.mode === 'actual') return h + renderActual();
 
     var sum = HF.budgetSummary(S, s.view), w = VIEW_WORD[s.view];
@@ -138,7 +146,7 @@
     var nw = HF.netWorth(S, s.includeBusiness ? 'all' : 'household');
     h += '<div class="row2 mt12">' +
       '<button class="stat" data-act="page" data-val="networth"><div class="lbl">Net worth</div><div class="val num">' + money(nw.net, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' debt balances missing' : 'assets − all debts') + '</div></button>' +
-      '<button class="stat" data-act="tab" data-val="debts"><div class="lbl">Total debt</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (s.includeBusiness ? 'incl. business' : 'household') + '</div></button></div>';
+      '<button class="stat" data-act="tab" data-val="debts"><div class="lbl">Total debt</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">all debts</div></button></div>';
 
     h += '<section class="section"><div class="section-head"><h2>Expenses</h2><button class="link" data-act="add-item" data-dir="out">' + icon('plus', 16) + ' Add</button></div>';
     h += '<div style="margin-bottom:10px">' + seg('expView', [['categories', 'Categories'], ['all', 'All']], s.expView, 'sm') + '</div>';
@@ -164,12 +172,19 @@
     });
     if (!rows.length) return '<div class="card">' + emptyBlock('tag', 'No expenses yet', 'Add your first expense.') + '</div>';
     var max = Math.max.apply(null, rows.map(function (r) { return r.v; }).concat([1]));
-    return '<div class="list">' + rows.map(function (r) {
-      var pct = sum.expenses ? r.v / sum.expenses * 100 : 0;
-      return '<button class="row cat-row ' + (r.dim ? 'dim' : '') + '" data-act="page" data-val="category" data-id="' + r.c.id + '">' + catIcon(r.c) +
+    // Tap a category to open it in place; drag the grip to reorder categories or the items inside.
+    return '<div class="list" data-sort-list="cats">' + rows.map(function (r) {
+      var pct = sum.expenses ? r.v / sum.expenses * 100 : 0, key = 'c_' + r.c.id, open = ui.open[key];
+      var h = '<div class="grp' + (open ? ' open' : '') + '" data-sort-id="' + r.c.id + '"><div class="row cat-row ' + (r.dim ? 'dim' : '') + '" role="button" tabindex="0" aria-expanded="' + !!open + '" data-act="toggle" data-id="' + key + '">' + grip() + catIcon(r.c) +
         '<div class="main"><div class="top-line"><span class="name">' + esc(r.c.name) + '</span><span class="num" style="font-weight:700">' + money(r.shown, { dp: 0 }) + '</span></div>' +
         '<div class="top-line"><div class="bar" style="flex:1;margin-right:12px"><span style="width:' + (r.dim ? 0 : r.v / max * 100).toFixed(1) + '%"></span></div><span class="pct">' + (r.note || pct.toFixed(0) + '%') + '</span></div></div>' +
-        icon('chev', 18, 'chev') + '</button>';
+        icon('chev', 18, 'chev') + '</div>';
+      if (open) {
+        h += '<div class="grp-body" data-sort-list="items:' + r.c.id + '">' + catItems(r.c.id).map(function (it) { return itemRow(it, false, true); }).join('') + '</div>' +
+          '<div class="grp-foot"><button class="link" data-act="add-item" data-dir="out" data-cat="' + r.c.id + '">' + icon('plus', 16) + ' Add expense</button>' +
+          '<button class="link" data-act="page" data-val="category" data-id="' + r.c.id + '">Details ' + icon('chev', 14) + '</button></div>';
+      }
+      return h + '</div>';
     }).join('') + '</div>';
   }
 
@@ -191,17 +206,16 @@
     return out.length ? '<div class="note">' + out.join('<br>') + '</div>' : '';
   }
 
-  function itemRow(it, showCat) {
+  function itemRow(it, showCat, sortable) {
     var view = S.settings.view, reason = HF.excludedReason(S, it), isOne = it.frequency === 'oneoff';
     var v = isOne ? Number(it.amount) || 0 : conv(it, view);
     var c = cat(it.categoryId), bits = [srcBadge(it.source)];
-    if (HF.isBusiness(S, it)) bits.push(badge(reason === 'Business' ? 'Business · excluded' : 'Business', 'outline'));
     if (it.review) bits.push(badge('Review', 'flag'));
     if (reason && reason !== 'Business') bits.push(badge(reason, 'outline'));
     if (it.endDate && !reason) bits.push(badge('Ends ' + HF.fmtDate(it.endDate, true), 'outline'));
     bits.push('<span>' + esc((Number(it.amount) ? money(it.amount, { dp: 2 }) : '—') + ' ' + HF.freqLabel(it)) + (showCat && c ? ' · ' + esc(c.name) : '') + '</span>');
     if (it.source === 'statement_avg') bits.push('<span style="flex-basis:100%">' + AVG_LABEL + '</span>');
-    return '<div class="row ' + (reason ? 'dim' : '') + (!it.active ? ' off' : '') + '">' +
+    return '<div class="row ' + (reason ? 'dim' : '') + (!it.active ? ' off' : '') + '"' + (sortable ? ' data-sort-id="' + it.id + '">' + grip() : '>') +
       '<div class="main" data-act="edit-item" data-id="' + it.id + '" style="cursor:pointer"><div class="name">' + esc(it.name) + '</div><div class="sub">' + bits.join('') + '</div></div>' +
       '<div class="amt num ' + (it.direction === 'in' && !reason ? 'pos' : '') + '">' + (Number(it.amount) ? money(v) : '—') + '<small>' + (isOne ? 'once' : VIEW_SHORT[view]) + '</small></div>' +
       miniBtns('item', it.id) + '</div>';
@@ -275,7 +289,7 @@
     h += '</div>';
     h += '<div class="mt16">' + seg('catTab', [['items', 'Items'], ['insight', 'Insight']], ui.catTab, 'sm') + '</div>';
     if (ui.catTab === 'items') {
-      h += items.length ? '<div class="list mt12">' + items.map(function (it) { return itemRow(it, false); }).join('') + '</div>' : '<div class="card mt12">' + emptyBlock(c.icon, 'Nothing here yet', 'Add an expense to this category.') + '</div>';
+      h += items.length ? '<div class="list mt12" data-sort-list="items:' + c.id + '">' + catItems(c.id).map(function (it) { return itemRow(it, false, true); }).join('') + '</div>' : '<div class="card mt12">' + emptyBlock(c.icon, 'Nothing here yet', 'Add an expense to this category.') + '</div>';
       var tx = S.transactions.filter(function (t) { return t.category_id === c.id; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 8);
       if (tx.length) h += '<div class="section-head mt16"><h2>Recent transactions</h2></div><div class="list">' + tx.map(txRow).join('') + '</div>';
     } else h += categoryInsight(c, items, v);
@@ -314,7 +328,6 @@
       '<div class="kv"><span>Sources</span><b style="text-align:right">' + (Object.keys(bySrc).map(function (k) { return SOURCE_LABEL[k] + ' ×' + bySrc[k]; }).join(', ') || '—') + '</b></div></div>';
     var notes = [];
     if (items.some(function (i) { return i.source === 'statement_avg'; })) notes.push(AVG_LABEL + '. Cash spending is only included when you add it.');
-    if (items.some(function (i) { return HF.isBusiness(S, i); })) notes.push('Business / trust items are ' + (S.settings.includeBusiness ? 'included' : 'excluded') + ' (switch on Budget).');
     if (c.type === 'savings') notes.push('Family savings leave the adult account but aren\'t consumption — they\'re counted in net worth.');
     if (c.type === 'oneoff') notes.push('One-offs are listed so nothing is hidden, but never count toward recurring spending.');
     var tx = S.transactions.filter(function (t) { return t.category_id === c.id && t.amount < 0 && !HF.txExcluded(S, t); });
@@ -347,7 +360,7 @@
     cats.sort(function (x, y) { return y.v - x.v; });
     var max = cats.length ? cats[0].v : 1;
     function body() {
-      return '<div class="ov-total"><div class="lbl muted">Total expenses · ' + (actual ? 'actual · ' : '') + VIEW_WORD[view] + 'ly · ' + (s.includeBusiness ? 'incl. business' : 'household') + '</div><div class="big num">' + money(total, { dp: 2 }) + '</div></div>' +
+      return '<div class="ov-total"><div class="lbl muted">Total expenses · ' + (actual ? 'actual · ' : '') + VIEW_WORD[view] + 'ly</div><div class="big num">' + money(total, { dp: 2 }) + '</div></div>' +
         '<div style="margin-bottom:12px">' + seg('ovMode', [['amount', 'Amount'], ['pct', 'Percentage']], ui.ovMode) + '</div>' +
         cats.map(function (x) {
           var pct = total ? x.v / total * 100 : 0;
@@ -534,7 +547,6 @@
   function renderDebts() {
     var withBiz = !!S.settings.includeBusiness;
     var h = top('Debts', { actions: '<button class="icon-btn" data-act="add-debt" aria-label="Add debt">' + icon('plus', 22) + '</button>' });
-    h += '<div class="controls">' + scopeSeg() + '</div>';
     var inScope = S.debts.filter(function (d) { return withBiz || d.scope !== 'business'; });
     var active = inScope.filter(function (d) { return d.active !== false; });
     var bal = 0, pay = 0, interest = 0, missing = 0, biz = 0;
@@ -545,7 +557,7 @@
     });
     S.debts.forEach(function (d) { if (!withBiz && d.scope === 'business' && d.active !== false) biz += Number(d.balance) || 0; });
     h += '<div class="card hero"><div class="hero-top"><div><div class="lbl">Total debt balance</div><div class="big num">' + money(bal, { dp: 0 }) + '</div>' +
-      '<div class="per">' + (withBiz ? 'Household + business / trust' : 'Household' + (biz ? ' · business / trust ' + money(biz, { dp: 0 }) + ' not shown' : '')) + '</div></div>' +
+      '<div class="per">All active debts</div></div>' +
       '<div class="pill"><b class="num">' + money(pay, { dp: 0 }) + '</b><small>repayments / month</small></div></div>' +
       '<div class="split" style="grid-template-columns:1fr 1fr"><div><small>Est. interest / month</small><b class="num">' + money(interest, { dp: 0 }) + '</b></div><div><small>Balances not set</small><b>' + missing + '</b></div></div></div>';
     h += '<div class="mt16">' + seg('debtTab', [['active', 'Active'], ['paid', 'Paid off']], ui.debtTab, 'sm') + '</div>';
@@ -562,7 +574,6 @@
     var bits = [];
     if (d.rate != null && d.rate !== '') bits.push('<span>' + d.rate + '%</span>');
     if (payoff) bits.push('<span>' + payoff + '</span>');
-    if (d.scope === 'business') bits.push(badge('Business / trust', 'outline'));
     if (d.limit && bal > d.limit) bits.push('<span class="neg" style="font-weight:600">over limit by ' + money(bal - d.limit, { dp: 2 }) + '</span>');
     var util = d.limit && bal != null ? Math.min(100, bal / d.limit * 100) : null;
     return '<button class="row" data-act="edit-debt" data-id="' + d.id + '"><div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + bits.join('<span>·</span>') + '</div>' +
@@ -583,12 +594,11 @@
     var scope = S.settings.includeBusiness ? 'all' : 'household';
     var nw = HF.netWorth(S, scope);
     var h = top('Net Worth', { back: true, actions: '<button class="icon-btn" data-act="add-asset" aria-label="Add asset">' + icon('plus', 22) + '</button>' });
-    h += '<div class="controls">' + scopeSeg() + '</div>';
     var hist = (S.nwHistory || []).map(function (p) { return { date: p.date, value: scope === 'all' ? p.all : p.household }; });
     var monthAgo = HF.toISO(new Date(Date.now() - 30 * 864e5)), base = null;
     hist.forEach(function (p) { if (p.date <= monthAgo) base = p; });
     var change = base && base.value ? (nw.net - base.value) / Math.abs(base.value) * 100 : null;
-    h += '<div class="card hero"><div class="hero-top"><div><div class="lbl">Total net worth</div><div class="big num">' + money(nw.net, { dp: 0 }) + '</div><div class="per">' + (scope === 'all' ? 'Household + business / trust' : 'Household only') + ' · assets − all debts</div></div>' +
+    h += '<div class="card hero"><div class="hero-top"><div><div class="lbl">Total net worth</div><div class="big num">' + money(nw.net, { dp: 0 }) + '</div><div class="per">Assets − all debts</div></div>' +
       (change != null ? '<div class="pill"><b class="num ' + (change >= 0 ? 'pos' : 'neg') + '">' + icon(change >= 0 ? 'arrowUp' : 'arrowDown', 16) + Math.abs(change).toFixed(1) + '%</b><small>vs last month</small></div>' : '') + '</div>';
     var days = { '1M': 31, '3M': 92, '6M': 183, '1Y': 366, All: 1e5 }[ui.nwRange];
     var from = HF.toISO(new Date(Date.now() - days * 864e5));
@@ -611,14 +621,14 @@
     var debts = S.debts.filter(function (d) { return d.active !== false && (scope === 'all' || d.scope !== 'business'); }), dk = 'nw_debts', dOpen = ui.open[dk];
     h += '<div class="grp"><button class="row" data-act="toggle" data-id="' + dk + '"><div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">Debts</div><div class="sub">' + debts.length + ' debts' + (nw.missing.length ? ' · ' + nw.missing.length + ' without balance' : '') + '</div></div><div class="amt num neg">−' + money(nw.liabilities, { dp: 0 }) + '</div>' + icon(dOpen ? 'down' : 'chev', 18, 'chev') + '</button>' +
       (dOpen ? debts.map(function (d) {
-        return '<button class="row" data-act="edit-debt" data-id="' + d.id + '" style="padding-left:66px"><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + (d.scope === 'business' ? badge('Business / trust', 'outline') : '') + (d.balance == null ? badge('Balance not set', 'flag') : '') + '</div></div><div class="amt num">' + (d.balance == null ? '—' : '−' + money(d.balance, { dp: 2 })) + '</div></button>';
+        return '<button class="row" data-act="edit-debt" data-id="' + d.id + '" style="padding-left:66px"><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + (d.balance == null ? badge('Balance not set', 'flag') : '') + '</div></div><div class="amt num">' + (d.balance == null ? '—' : '−' + money(d.balance, { dp: 2 })) + '</div></button>';
       }).join('') : '') + '</div>';
     h += '</div><button class="btn soft block mt12" data-act="add-asset">' + icon('plus', 18) + ' Add asset</button>';
     h += '<p class="muted small" style="margin:10px 4px">Not part of weekly cash flow. Market values change — update them when you check.</p>';
     return h;
   }
   function assetRow(a) {
-    return '<div class="row" style="padding-left:66px"><div class="main" data-act="edit-asset" data-id="' + a.id + '" style="cursor:pointer"><div class="name">' + esc(a.name) + '</div><div class="sub">' + (a.scope === 'business' ? badge('Business', 'outline') : '') +
+    return '<div class="row" style="padding-left:66px"><div class="main" data-act="edit-asset" data-id="' + a.id + '" style="cursor:pointer"><div class="name">' + esc(a.name) + '</div><div class="sub">' + '' +
       '<span>Updated ' + (a.updated ? HF.fmtDate(a.updated, true) : '—') + '</span>' + (a.notes ? '<span>· ' + esc(a.notes) + '</span>' : '') + '</div></div><div class="amt num">' + money(a.value, { dp: 2 }) + '</div>' + miniBtns('asset', a.id) + '</div>';
   }
 
@@ -632,7 +642,7 @@
     h += '<button class="card profile" data-act="profile" style="width:100%;text-align:left"><div class="avatar">' + esc(initials(s.householdName || s.userName)) + '</div><div style="flex:1"><b>' + esc(s.householdName || 'Household') + '</b><span class="muted small">Household account · ' + esc(s.userName || '') + '</span></div>' + icon('chev', 18, 'chev') + '</button>';
     h += '<div class="list mt12">' +
       moreRow('tab', 'transfer', 'Transactions', S.transactions.length + ' imported and cash entries', ' data-val="transactions"') +
-      moreRow('settings', 'gear', 'Household settings', 'Business / trust and manual cash in totals') +
+      moreRow('settings', 'gear', 'Household settings', 'Manual cash in totals') +
       moreRow('page', 'chart', 'Net Worth', 'Assets minus all debts', ' data-val="networth"') +
       moreRow('page', 'report', 'Reports', 'Actual in vs out over time', ' data-val="reports"') +
       moreRow('manage-cats', 'grid', 'Categories', S.categories.length + ' categories') +
@@ -654,7 +664,6 @@
   function openSettings() {
     var s = S.settings;
     openSheet('Household settings',
-      toggleHtml('includeBusiness', 'Include business / trust', 'JZD ATO, Revenue NSW JZD, business software, business debts and assets', s.includeBusiness, true) +
       toggleHtml('includeCash', 'Include manual cash', 'Off = bank-derived totals only. On = bank + manual cash', s.includeCash, true));
   }
   function openAppearance() {
@@ -669,7 +678,6 @@
       '<p style="margin-top:0"><b>Budget</b> = recurring costs + statement-average variable spending (' + AVG_LABEL + '). One-offs are listed but not counted.</p>' +
       '<p><b>Conversions:</b> weekly ×52, fortnightly ×26, monthly ×12, quarterly ×4, per term ×4, every X weeks ×52/X. Weekly = yearly ÷ 52, monthly = yearly ÷ 12.</p>' +
       '<p><b>Dates:</b> items with an end date (e.g. AGL arrears, Feb 2027) stop counting after it.</p>' +
-      '<p><b>Household vs + Business:</b> business / trust items (JZD ATO, Revenue NSW JZD, software, business debts) are left out unless you switch to + Business.</p>' +
       '<p><b>Weeks</b> run Monday → Sunday. In Actual, weekly figures group by each transaction\'s budget week, so a split payment can be moved into the week it belongs to.</p>' +
       '<p><b>Excluded from cash flow:</b> internal transfers between your own accounts, cash deposits (already counted as manual cash) and investment buys/sells.</p>' +
       '<p><b>Kids savings</b> leave the adult account as Family Savings: shown in expenses so Left over is honest, excluded from lifestyle, counted in net worth.</p>' +
@@ -716,7 +724,6 @@
       '<label class="field"><span>End date</span><input type="date" name="endDate" value="' + esc(it.endDate || '') + '"></label></div>' +
       '<div class="field"><span>Source</span>' + choice('source', [['statement', 'Statement'], ['statement_avg', 'Statement avg'], ['cash', 'Manual cash'], ['manual', 'Manual'], ['assumption', 'Assumption'], ['calculated', 'Calculated']], it.source) + '</div>' +
       '<div class="field"><span>Behaviour</span>' + choice('kind', [['fixed', 'Recurring'], ['variable', 'Variable'], ['oneoff', 'One-off']], it.kind) + '</div>' +
-      toggleHtml('household', 'Include in household total', 'Off = business / trust (only counted with + Business)', it.scope !== 'business') +
       toggleHtml('active', 'Active', 'Inactive items are kept but not counted', it.active) +
       toggleHtml('review', 'Needs review', 'Flag to check against statements', it.review) +
       '<label class="field mt12"><span>Provider</span><input name="provider" value="' + esc(it.provider) + '" placeholder="Optional"></label>' +
@@ -727,7 +734,7 @@
         name: form.name.value.trim() || 'Untitled', direction: radio(form, 'direction'),
         amount: Math.round(num(form.amount.value) * 100) / 100, frequency: form.frequency.value,
         customWeeks: form.frequency.value === 'everyX' ? num(form.customWeeks.value) || null : null,
-        source: radio(form, 'source'), kind: radio(form, 'kind'), scope: form.household.checked ? 'personal' : 'business',
+        source: radio(form, 'source'), kind: radio(form, 'kind'), scope: it.scope || 'personal',
         provider: form.provider.value.trim(), active: form.active.checked, review: form.review.checked, notes: form.notes.value.trim(),
         startDate: form.startDate.value || null, endDate: form.endDate.value || null
       };
@@ -810,14 +817,13 @@
       '<label class="field"><span>Frequency</span><select name="frequency">' + opts([['weekly', 'Weekly'], ['fortnightly', 'Fortnightly'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly']], d.frequency) + '</select></label></div>' +
       '<div class="grid2"><label class="field"><span>End date</span><input type="date" name="endDate" value="' + esc(d.endDate || '') + '"></label>' +
       '<label class="field"><span>Credit limit</span><div class="money-input"><input name="limit" inputmode="decimal" value="' + esc(v(d.limit)) + '" placeholder="Optional"></div></label></div>' +
-      '<div class="field"><span>Belongs to</span>' + choice('scope', [['personal', 'Household'], ['business', 'Business / trust']], d.scope) + '</div>' +
       toggleHtml('active', 'Active', 'Turn off when paid off — it moves to Paid off', d.active !== false) +
       '<label class="field mt12"><span>Notes</span><textarea name="notes">' + esc(d.notes) + '</textarea></label>' +
       (d.id ? '<button type="button" class="btn danger-text block" data-act="del-debt" data-id="' + d.id + '">' + icon('trash', 18) + ' Delete debt</button>' : '');
     openForm(d.id ? 'Edit Debt' : 'Add Debt', b, function (form) {
       function optNum(x) { return String(x).trim() === '' ? null : num(x); }
       var val = { name: form.name.value.trim() || 'Debt', balance: optNum(form.balance.value), limit: optNum(form.limit.value), rate: optNum(form.rate.value),
-        payment: num(form.payment.value), frequency: form.frequency.value, scope: radio(form, 'scope'), endDate: form.endDate.value || null, active: form.active.checked, notes: form.notes.value.trim() };
+        payment: num(form.payment.value), frequency: form.frequency.value, scope: d.scope || 'personal', endDate: form.endDate.value || null, active: form.active.checked, notes: form.notes.value.trim() };
       if (d.id) Object.assign(d, val); else S.debts.push(Object.assign({ id: HF.uid('d') }, val));
       closeSheet(); commit('Saved');
     });
@@ -829,11 +835,10 @@
       '<div class="grid2"><label class="field"><span>Value</span><div class="money-input"><input name="value" inputmode="decimal" value="' + esc(a.value) + '"></div></label>' +
       '<label class="field"><span>Value as at</span><input type="date" name="updated" value="' + esc(a.updated || todayISO()) + '"></label></div>' +
       '<div class="field"><span>Type</span>' + choice('type', ASSET_TYPES, a.type) + '</div>' +
-      '<div class="field"><span>Belongs to</span>' + choice('scope', [['household', 'Household'], ['business', 'Business / trust']], a.scope) + '</div>' +
       '<label class="field"><span>Notes</span><textarea name="notes">' + esc(a.notes) + '</textarea></label>' +
       (a.id ? '<button type="button" class="btn danger-text block" data-act="del-asset" data-id="' + a.id + '">' + icon('trash', 18) + ' Delete asset</button>' : '');
     openForm(a.id ? 'Edit Asset' : 'Add Asset', b, function (form) {
-      var val = { name: form.name.value.trim() || 'Asset', type: radio(form, 'type'), value: Math.round(num(form.value.value) * 100) / 100, scope: radio(form, 'scope'), updated: form.updated.value, notes: form.notes.value.trim() };
+      var val = { name: form.name.value.trim() || 'Asset', type: radio(form, 'type'), value: Math.round(num(form.value.value) * 100) / 100, scope: a.scope || 'household', updated: form.updated.value, notes: form.notes.value.trim() };
       if (a.id) Object.assign(a, val); else S.assets.push(Object.assign({ id: HF.uid('as') }, val));
       closeSheet(); commit('Saved');
     }, function (el) {
@@ -1140,8 +1145,47 @@
     'close-sheet': function () { closeSheet(); }
   };
 
+  // ---------- Drag to reorder (grip handle; works with touch and mouse) ----------
+  var drag = null;
+  document.addEventListener('pointerdown', function (e) {
+    var g = e.target.closest('.grip'); if (!g) return;
+    var el = g.closest('[data-sort-id]'), list = el && el.parentElement;
+    if (!list || !list.hasAttribute('data-sort-list')) return;
+    e.preventDefault();
+    drag = { el: el, list: list, y0: e.clientY, id: e.pointerId, moved: false };
+    el.classList.add('dragging'); list.classList.add('sorting');
+    try { g.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  document.addEventListener('pointermove', function (e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    e.preventDefault();
+    var el = drag.el, dy = e.clientY - drag.y0, prev = el.previousElementSibling, next = el.nextElementSibling;
+    // Swap with a neighbour once the dragged row passes its middle; keep the row under the finger.
+    if (next && next.hasAttribute('data-sort-id') && dy > next.offsetHeight / 2) { drag.list.insertBefore(next, el); drag.y0 += next.offsetHeight; drag.moved = true; }
+    else if (prev && prev.hasAttribute('data-sort-id') && -dy > prev.offsetHeight / 2) { drag.list.insertBefore(el, prev); drag.y0 -= prev.offsetHeight; drag.moved = true; }
+    el.style.transform = 'translateY(' + (e.clientY - drag.y0) + 'px)';
+  });
+  function endDrag() {
+    if (!drag) return;
+    var d = drag; drag = null;
+    d.el.style.transform = ''; d.el.classList.remove('dragging'); d.list.classList.remove('sorting');
+    if (!d.moved) return;
+    var ids = Array.prototype.filter.call(d.list.children, function (x) { return x.hasAttribute('data-sort-id'); }).map(function (x) { return x.getAttribute('data-sort-id'); });
+    if (d.list.getAttribute('data-sort-list') === 'cats') {
+      // Only some categories are shown; slot the new order into their existing positions.
+      var all = sortedCats(), slots = [], k = 0;
+      all.forEach(function (c, i) { if (ids.indexOf(c.id) >= 0) slots.push(i); });
+      slots.forEach(function (i) { all[i] = cat(ids[k++]); });
+      all.forEach(function (c, i) { c.order = i; });
+    } else ids.forEach(function (id, i) { var it = byId(S.items, id); if (it) it.order = i; });
+    persist(); render();
+  }
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+
   document.addEventListener('click', function (e) {
     chartHover(e);
+    if (e.target.closest('.grip')) return;
     var b = e.target.closest('[data-act]');
     if (!b || b.tagName === 'INPUT') return;
     var fn = actions[b.dataset.act];
