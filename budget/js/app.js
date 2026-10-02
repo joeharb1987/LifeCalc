@@ -1,4 +1,4 @@
-/* LifeTrack — UI. Renders from a single state object (S) and persists on every change. */
+/* LifeCalc Budget — UI. Renders from a single state object (S) and persists on every change. */
 (function () {
   'use strict';
   var HF = window.HF, IM = HF.importer, icon = HF.icon;
@@ -66,25 +66,29 @@
   }
 
   // ---------- Render ----------
-  var NAV = [['home', 'Home', 'home'], ['transactions', 'Transactions', 'transfer'], ['budget', 'Budget', 'pie'], ['debts', 'Debts', 'card'], ['more', 'More', 'dots']];
+  // Same five items as the calculator's bar; Calc is LifeCalc's home screen.
+  var NAV = [['calc', 'Calc', 'calc'], ['budget', 'Budget', 'pie'], ['transactions', 'Transactions', 'transfer'], ['debts', 'Debts', 'card'], ['more', 'More', 'dots']];
+  var TABS = ['budget', 'transactions', 'debts', 'more'];
   var PAGE_TAB = { category: 'budget', networth: 'more', reports: 'more' };
   function render() {
     var th = S.settings.theme || 'auto';
     if (th === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', th);
-    var tab = S.settings.tab || 'home';
+    var tab = TABS.indexOf(S.settings.tab) >= 0 ? S.settings.tab : 'budget';
     var html;
     if (ui.page) html = { category: renderCategory, networth: renderNetWorth, reports: renderReports }[ui.page.name]();
-    else html = { home: renderHome, budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab]();
+    else html = { budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab]();
     $app.innerHTML = html;
     var active = ui.page ? (ui.page.from || PAGE_TAB[ui.page.name]) : tab;
     document.getElementById('navInner').innerHTML = NAV.map(function (n) {
+      if (n[0] === 'calc') return '<a href="../">' + icon(n[2], 23) + '<span>' + n[1] + '</span></a>';
       return '<button class="' + (n[0] === active ? 'on' : '') + '" data-act="tab" data-val="' + n[0] + '" aria-current="' + (n[0] === active ? 'page' : 'false') + '">' + icon(n[2], 23) + '<span>' + n[1] + '</span></button>';
     }).join('');
+    if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
   }
-  function go(page) { page.from = ui.page ? ui.page.from : (S.settings.tab || 'home'); ui.page = page; render(); window.scrollTo(0, 0); }
+  function go(page) { page.from = ui.page ? ui.page.from : (S.settings.tab || 'budget'); ui.page = page; render(); window.scrollTo(0, 0); }
 
-  // ===================== HOME =====================
+  // ===================== SHARED SUMMARY =====================
   function greeting() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
   function basisNote(sum) {
     if (sum.cashSpendingEntered) return '<div class="basis">' + icon('info', 18) + '<div><b>Bank + manual cash spending</b>Cash spending you\'ve entered is included.</div></div>';
@@ -98,54 +102,10 @@
       '<button class="stat" data-act="overview"><div class="lbl">Expenses</div><div class="val num">' + money(expenses, { dp: 0 }) + '</div><div class="per">per ' + w + '</div></button>' +
       '<div class="stat left ' + (left < 0 ? 'negative' : '') + '"><div class="lbl">Left over</div><div class="val num">' + money(left, { dp: 0 }) + '</div><div class="per">per ' + w + '</div></div></div>';
   }
-  function logoMark() {
-    return '<svg viewBox="0 0 32 32" width="30" height="30" fill="currentColor" aria-hidden="true"><circle cx="16" cy="9" r="4.2"/><circle cx="9" cy="16" r="4.2" opacity=".75"/><circle cx="23" cy="16" r="4.2" opacity=".75"/><circle cx="16" cy="23" r="4.2" opacity=".55"/><circle cx="16" cy="16" r="2.2" fill="var(--bg)"/></svg>';
-  }
-  function renderHome() {
-    var s = S.settings, w = VIEW_WORD[s.view];
-    var sum = HF.budgetSummary(S, s.view);
-    var h = '<header class="brand"><div class="brand-mark">' + logoMark() + '</div><div class="brand-text"><div class="brand-name">LifeTrack</div>' +
-      '<div class="brand-sub">' + greeting() + ', ' + esc(s.userName || 'there') + '</div></div>' +
-      '<button class="avatar" data-act="tab" data-val="more" aria-label="Profile">' + esc(initials(s.householdName || s.userName)) + '</button></header>';
-    h += '<h2 class="h2" style="margin:0 2px 12px">Your Money</h2>';
-    h += '<div class="controls">' + seg('view', [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']], s.view) + '</div>';
-    h += statTrio(sum.income, sum.expenses, sum.available, w);
-    h += basisNote(sum);
-    h += '<p class="muted small" style="margin:8px 4px 0">' + (s.includeBusiness ? 'Household + business / trust' : 'Household only') + ' · recurring costs + statement averages</p>';
-
-    // Weekly trend (actual, from statements)
-    var hist = HF.history(S, 'weekly', 12);
-    h += '<div class="card pad mt16"><div style="font-weight:700">Left over each week</div>';
-    if (hist.length >= 2) {
-      var vals = hist.map(function (b) { return b.available; });
-      var avg = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length, last = vals[vals.length - 1];
-      h += '<div class="muted small" style="margin-bottom:8px">Actual, from statements · Monday–Sunday</div>' +
-        lineChart('homeTrend', hist.map(function (b) { return { label: HF.periodShortLabel('weekly', b.key), value: b.available }; }), { height: 130 }) +
-        '<p class="small" style="margin:10px 0 0;display:flex;gap:6px;align-items:center"><span class="' + (last >= avg ? 'pos' : 'neg') + '">' + icon(last >= avg ? 'arrowUp' : 'arrowDown', 16) + '</span>' +
-        'Latest week ' + money(last, { dp: 0 }) + ' vs ' + money(avg, { dp: 0 }) + ' average</p>';
-    } else {
-      h += emptyBlock('chart', 'No trend yet', 'Import bank statements to see what was actually left each week.', '<button class="btn soft" data-act="import">Import statement</button>');
-    }
-    h += '</div>';
-
-    // Net worth + debt tiles
-    var nw = HF.netWorth(S, s.includeBusiness ? 'all' : 'household');
-    h += '<div class="row2 mt12">' +
-      '<button class="stat" data-act="page" data-val="networth"><div class="lbl">Net worth</div><div class="val num">' + money(nw.net, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' debt balances missing' : 'assets − all debts') + '</div></button>' +
-      '<button class="stat" data-act="tab" data-val="debts"><div class="lbl">Total debt</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (s.includeBusiness ? 'incl. business' : 'household') + '</div></button></div>';
-
-    // Recent transactions
-    var recent = S.transactions.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 4);
-    h += '<section class="section"><div class="section-head"><h2>Recent transactions</h2>' + (recent.length ? '<button class="link" data-act="tab" data-val="transactions">See all ' + icon('chev', 16) + '</button>' : '') + '</div>';
-    h += recent.length ? '<div class="list">' + recent.map(txRow).join('') + '</div>'
-      : '<div class="card">' + emptyBlock('transfer', 'No transactions yet', 'Import a statement or add a cash entry.', '<div class="btn-row"><button class="btn soft" data-act="import">Import</button><button class="btn" data-act="add-tx">Cash entry</button></div>') + '</div>';
-    return h + '</section>';
-  }
-
   // ===================== BUDGET =====================
   function renderBudget() {
     var s = S.settings;
-    var h = top('Budget', { actions: '<button class="icon-btn" data-act="overview" aria-label="Expense overview">' + icon('dots', 22) + '</button>' });
+    var h = top('Budget', { sub: greeting() + ', ' + esc(s.userName || 'there'), actions: '<button class="icon-btn" data-act="overview" aria-label="Expense overview">' + icon('dots', 22) + '</button>' });
     h += '<div class="controls">' + seg('view', [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']], s.view) +
       '<div class="row2">' + seg('mode', [['budget', 'Budget'], ['actual', 'Actual']], s.mode, 'sm') + scopeSeg() + '</div></div>';
     if (s.mode === 'actual') return h + renderActual();
@@ -157,6 +117,10 @@
       return '<div><small>' + p[0] + '</small><b class="num">' + money(p[1], { dp: 0 }) + '</b></div>';
     }).join('') + '</div><div class="kv mt12" style="border-top:1px solid var(--line)"><span>Fixed recurring</span><b class="num">' + money(sum.fixed) + '</b></div>' +
       '<div class="kv"><span>Statement averages</span><b class="num">' + money(sum.variable) + '</b></div></div>';
+    var nw = HF.netWorth(S, s.includeBusiness ? 'all' : 'household');
+    h += '<div class="row2 mt12">' +
+      '<button class="stat" data-act="page" data-val="networth"><div class="lbl">Net worth</div><div class="val num">' + money(nw.net, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' debt balances missing' : 'assets − all debts') + '</div></button>' +
+      '<button class="stat" data-act="tab" data-val="debts"><div class="lbl">Total debt</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (s.includeBusiness ? 'incl. business' : 'household') + '</div></button></div>';
 
     h += '<section class="section"><div class="section-head"><h2>Expenses</h2><button class="link" data-act="add-item" data-dir="out">' + icon('plus', 16) + ' Add</button></div>';
     h += '<div style="margin-bottom:10px">' + seg('expView', [['categories', 'Categories'], ['all', 'All']], s.expView, 'sm') + '</div>';
@@ -450,9 +414,10 @@
     h += '<div class="controls">' + seg('histView', [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']], v) + '</div>';
     if (!hist.length) return h + '<div class="card">' + emptyBlock('report', 'No data yet', 'Reports are built from imported statements and manual cash entries.', '<button class="btn accent" data-act="import">Import statement</button>') + '</div>';
     var labels = hist.map(function (b) { return HF.periodShortLabel(v, b.key); });
+    h += '<div class="card pad"><div style="font-weight:700">Left over each ' + VIEW_WORD[v] + '</div><div class="muted small" style="margin-bottom:8px">' + (v === 'weekly' ? 'Monday–Sunday budget weeks' : 'Calendar ' + VIEW_WORD[v] + 's') + '</div>' +
+      lineChart('repTrend', hist.map(function (b, i) { return { label: labels[i], value: b.available }; }), { height: 130 }) + '</div>';
     h += '<div class="card pad"><div style="font-weight:700;margin-bottom:6px">Money in vs money out</div><div class="legend"><span><i class="dot" style="background:var(--series-a)"></i>In</span><span><i class="dot" style="background:var(--series-b)"></i>Out</span></div>' +
       barChart('rep1', labels, [{ name: 'In', color: 'var(--series-a)', values: hist.map(function (b) { return b.income; }) }, { name: 'Out', color: 'var(--series-b)', values: hist.map(function (b) { return b.expenses; }) }]) + '</div>';
-    h += '<div class="card pad"><div style="font-weight:700;margin-bottom:8px">Left over</div>' + barChart('rep2', labels, [{ name: 'Left', color: 'var(--series-b)', values: hist.map(function (b) { return b.available; }) }]) + '</div>';
     h += '<div class="card pad" style="overflow-x:auto"><table class="tbl num"><thead><tr><th>' + (v === 'weekly' ? 'Week (Mon)' : v === 'monthly' ? 'Month' : 'Year') + '</th><th>In</th><th>Out</th><th>Left</th><th>Savings</th></tr></thead><tbody>' +
       hist.slice().reverse().map(function (b) {
         return '<tr><td>' + HF.periodShortLabel(v, b.key) + '</td><td>' + money(b.income, { dp: 0 }) + '</td><td>' + money(b.expenses, { dp: 0 }) + '</td><td>' + money(b.available, { dp: 0 }) + '</td><td>' + money(b.savings, { dp: 0 }) + '</td></tr>';
@@ -1022,7 +987,7 @@
   function exportData() {
     var blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
     var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'lifetrack-' + todayISO() + '.json';
+    a.href = URL.createObjectURL(blob); a.download = 'lifecalc-budget-' + todayISO() + '.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
     toast('Backup downloaded');
@@ -1030,7 +995,7 @@
   function restoreData(file) {
     file.text().then(function (txt) {
       var data = JSON.parse(txt);
-      if (!data || !Array.isArray(data.items) || !Array.isArray(data.categories)) throw new Error('Not a LifeTrack backup');
+      if (!data || !Array.isArray(data.items) || !Array.isArray(data.categories)) throw new Error('Not a LifeCalc Budget backup');
       if (!confirm('Replace all current data with this backup?')) return;
       S = HF.migrate(data); ui.page = null; commit('Backup restored');
     }).catch(function (e) { toast(e.message || 'Could not read backup'); });
@@ -1180,9 +1145,17 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    window.addEventListener('load', function () { navigator.serviceWorker.register('./sw.js').catch(function () {}); });
+    window.addEventListener('load', function () { navigator.serviceWorker.register('../service-worker.js', { scope: '../' }).catch(function () {}); });
   }
+  // The calculator's bar links to budget/#<tab>.
+  function routeFromHash() {
+    var h = location.hash.slice(1);
+    if (TABS.indexOf(h) >= 0 && (h !== S.settings.tab || ui.page)) { ui.page = null; closeSheet(true); S.settings.tab = h; persist(); render(); window.scrollTo(0, 0); }
+  }
+  window.addEventListener('hashchange', routeFromHash);
   window.__HF_STATE = function () { return S; };
+  var initial = location.hash.slice(1);
+  if (TABS.indexOf(initial) >= 0) S.settings.tab = initial;
   persist();
   render();
 })();

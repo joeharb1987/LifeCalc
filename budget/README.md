@@ -1,12 +1,13 @@
-# LifeTrack (Joe & Zhila)
+# LifeCalc Budget (Joe & Zhila)
 
-Mobile-first household finance app: **money in → money out → left over**.
-Screens: Home, Transactions, Budget (+ category detail, expense overview), Debts, More (Net Worth, Reports, settings).
-Plain HTML/CSS/JS, no build step. Lives alongside the LifeCalc calculator at `/finance/`.
+LifeCalc's Budget tab: **money in → money out → left over**.
+The calculator (`/`) is the home screen; this lives at `/budget/` and shares its bottom bar:
+Calc · Budget · Transactions · Debts · More (Net Worth, Reports, settings). The calculator's bar links to `budget/#<tab>`.
+Plain HTML/CSS/JS, no build step. One manifest and service worker for the whole app, at the repo root.
 
-- **Open:** `https://<your-github-pages-domain>/LifeCalc/finance/` — then Share → Add to Home Screen.
-- **Run locally:** `python3 -m http.server` from the repo root, open `http://localhost:8000/finance/`.
-- **Tests:** `node finance/tests/core.test.js`
+- **Open:** `https://<your-github-pages-domain>/LifeCalc/` — then Share → Add to Home Screen (one app: calculator + budget).
+- **Run locally:** `python3 -m http.server` from the repo root, open `http://localhost:8000/`.
+- **Tests:** `node budget/tests/core.test.js`
 
 ## Files
 - `js/core.js` – frequency conversion, Monday–Sunday periods, budget/actual/net-worth maths, storage, migration

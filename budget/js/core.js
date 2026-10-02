@@ -1,4 +1,4 @@
-/* Household Finance — core logic: frequencies, storage, calculations.
+/* LifeCalc Budget — core logic: frequencies, storage, calculations.
    No UI code here so the maths can be tested in isolation (see tests/core.test.js). */
 (function (root) {
   'use strict';
@@ -146,7 +146,7 @@
       var seedIcons = {};
       seed.categories.forEach(function (c) { seedIcons[c.id] = c.icon; });
       state.categories.forEach(function (c) { c.icon = seedIcons[c.id] || 'tag'; });
-      if (state.settings) { delete state.settings.nwScope; if (state.settings.tab === 'budget') state.settings.tab = 'home'; }
+      if (state.settings) { delete state.settings.nwScope; }
     }
     if (from < 2) {
       // V1 was never released: take the corrected seed figures, keep any transactions.
@@ -160,6 +160,7 @@
       if (state.settings && state.settings.mode !== 'actual') state.settings.mode = 'budget';
     }
     state.settings = Object.assign({}, seed.settings, state.settings || {});
+    if (state.settings.tab === 'home') state.settings.tab = 'budget';   // Home is the calculator now
     state.version = seed.version;
     return state;
   }

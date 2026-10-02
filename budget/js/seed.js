@@ -1,4 +1,4 @@
-/* Household Finance — seed data for Joe & Zhila.
+/* LifeCalc Budget — seed data for Joe & Zhila.
    Figures come from the Jan–Sep 2026 bank statement review and Joe's confirmations.
    Everything here is editable in the app; this is only the starting point. */
 (function (root) {
@@ -264,7 +264,7 @@
         expView: 'categories',   // all | categories
         includeBusiness: false,  // business / trust items (JZD ATO, Revenue NSW JZD, software) in totals
         includeCash: true,       // manual cash items in totals
-        tab: 'home',
+        tab: 'budget',
         userName: 'Joe',
         householdName: 'Joe & Zhila',
         theme: 'auto'

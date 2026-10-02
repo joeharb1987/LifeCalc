@@ -1,4 +1,4 @@
-/* Household Finance — statement import: CSV / pasted text parsing,
+/* LifeCalc Budget — statement import: CSV / pasted text parsing,
    merchant rules, internal transfer detection and de-duplication. */
 (function (root) {
   'use strict';

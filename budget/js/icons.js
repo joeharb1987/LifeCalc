@@ -1,4 +1,4 @@
-/* LifeTrack — line icons (24×24, stroke = currentColor). Categories store an icon key from this set. */
+/* LifeCalc Budget — line icons (24×24, stroke = currentColor). Categories store an icon key from this set. */
 (function (root) {
   'use strict';
   var P = {
@@ -47,6 +47,7 @@
     pie: '<path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/>',
     arrowUp: '<path d="M7 17 17 7"/><path d="M9 7h8v8"/>',
     arrowDown: '<path d="M7 7l10 10"/><path d="M17 9v8H9"/>',
+    calc: '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/>',
     calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>'
   };
