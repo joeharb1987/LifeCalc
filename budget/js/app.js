@@ -116,12 +116,6 @@
 
   // ===================== SHARED SUMMARY =====================
   function greeting() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
-  function basisNote(sum) {
-    if (sum.cashSpendingEntered) return '<div class="basis">' + icon('info', 18) + '<div><b>Bank + manual cash spending</b>Cash spending you\'ve entered is included.</div></div>';
-    var yr = toAnnual(sum.cashIncome, S.settings.view);
-    return '<div class="basis">' + icon('info', 18) + '<div><b>Bank-only – cash spending not entered</b>' +
-      (yr ? 'About $' + (yr / 1000).toFixed(1) + 'k/yr of income is cash, with no cash spending against it yet.' : 'Add cash spending to complete the picture.') + '</div></div>';
-  }
   function statTrio(income, expenses, left, w) {
     return '<div class="stats">' +
       '<div class="stat"><div class="lbl">Income</div><div class="val num">' + money(income, { dp: 0 }) + '</div><div class="per">per ' + w + '</div></div>' +
@@ -137,7 +131,7 @@
     if (s.mode === 'actual') return h + renderActual();
 
     var sum = HF.budgetSummary(S, s.view), w = VIEW_WORD[s.view];
-    h += statTrio(sum.income, sum.expenses, sum.available, w) + basisNote(sum);
+    h += statTrio(sum.income, sum.expenses, sum.available, w);
     var t = sum.byType;
     h += '<div class="card pad mt12"><div class="split" style="margin:0;padding:0;border:0">' + [['Lifestyle', t.living], ['Debt', t.debt], ['Tax & gov', t.tax], ['Savings', t.savings]].map(function (p) {
       return '<div><small>' + p[0] + '</small><b class="num">' + money(p[1], { dp: 0 }) + '</b></div>';
@@ -151,7 +145,7 @@
     h += '<section class="section"><div class="section-head"><h2>Expenses</h2><button class="link" data-act="add-item" data-dir="out">' + icon('plus', 16) + ' Add</button></div>';
     h += '<div style="margin-bottom:10px">' + seg('expView', [['categories', 'Categories'], ['all', 'All']], s.expView, 'sm') + '</div>';
     h += s.expView === 'all' ? renderAllExpenses() : renderCategoryList(sum);
-    h += budgetNotes(sum) + '</section>';
+    h += '</section>';
 
     var incomes = S.items.filter(function (i) { return i.direction === 'in'; });
     h += '<section class="section" id="earnings"><div class="section-head"><h2>Earnings</h2><button class="link" data-act="add-item" data-dir="in">' + icon('plus', 16) + ' Add</button></div>';
@@ -186,24 +180,6 @@
       }
       return h + '</div>';
     }).join('') + '</div>';
-  }
-
-  function budgetNotes(sum) {
-    var s = S.settings, out = [], oneoffs = 0, review = 0, cashHidden = 0;
-    S.items.forEach(function (it) {
-      if (!it.active) return;
-      if (it.direction === 'out' && HF.isOneOff(S, it)) oneoffs += Number(it.amount) || 0;
-      if (it.review) review++;
-      if (it.source === 'cash') cashHidden++;
-    });
-    if (!s.includeBusiness && sum.businessExcluded > 0) out.push('<b>Business / trust</b> costs (' + money(sum.businessExcluded) + VIEW_SHORT[s.view] + ' — JZD ATO, Revenue NSW JZD, software) are excluded from household burn.');
-    HF.upcomingChanges(S, s.view, 12).forEach(function (c) {
-      out.push('<b>' + esc(c.item.name) + '</b> ' + c.kind + ' ' + HF.fmtDate(c.date, true) + ' → Left over ' + (c.change >= 0 ? '+' : '−') + money(Math.abs(c.change)) + VIEW_SHORT[s.view] + '.');
-    });
-    if (oneoffs > 0) out.push('<b>One-offs</b> (' + money(oneoffs) + ' total) are listed but not counted.');
-    if (!s.includeCash && cashHidden) out.push('<b>Manual cash</b> items are hidden from totals (bank-derived only).');
-    if (review) out.push('<b>' + review + ' item' + (review > 1 ? 's' : '') + '</b> flagged to review.');
-    return out.length ? '<div class="note">' + out.join('<br>') + '</div>' : '';
   }
 
   function itemRow(it, showCat, sortable) {
