@@ -118,7 +118,12 @@
     return sb.auth.signUp({ email: email, password: password, options: { emailRedirectTo: APP_URL } }).then(function (r) {
       if (r.error) throw r.error;
       session = r.data.session;
-      return session ? 'signed-in' : 'confirm';
+      if (session) return 'signed-in';
+      // Accounts are confirmed automatically on the server, so sign straight in (no email link needed).
+      return sb.auth.signInWithPassword({ email: email, password: password }).then(function (s2) {
+        if (s2.error) return 'confirm';
+        session = s2.data.session; return 'signed-in';
+      });
     });
   }
   function signIn(email, password) {

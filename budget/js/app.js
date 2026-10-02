@@ -1135,7 +1135,7 @@
         if (!c[0] || c[1].length < 6) { toast('Enter an email and a password of 6+ characters'); return; }
         busy(b, true);
         sy.signUp(c[0], c[1]).then(function (r) {
-          if (r === 'confirm') { busy(b, false); toast('Check your email and tap the link, then come back and Sign in'); }
+          if (r === 'confirm') { busy(b, false); toast('Account created. Tap Sign in'); }
           else openSync();
         }).catch(function (e) { busy(b, false); syncErr(e); });
       });
