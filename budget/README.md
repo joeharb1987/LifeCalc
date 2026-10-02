@@ -55,3 +55,13 @@ Items outside their start/end dates aren't counted. Everything counts as househo
 **Budget screen** – six tiles (Income, Expenses, Left over; Assets, Debts, Net worth), a runway line (cash in Bank accounts & cash ÷ average weekly spending over the last 13 weeks of bank data, or the budget if there's none), then Earnings, Expenses (category cards) and One-offs. Rows: tap to edit, swipe left to delete; Edit in a section header shows drag grips. Manual lines with matching bank transactions show `Budget $x · Bank avg $y`.
 
 **Net worth** = every asset − every active debt (one combined household). Debts without a balance are listed as not yet subtracted. `nwHistory` keeps one snapshot per day the value changes, for the chart.
+
+## Live sharing (Supabase)
+
+Project `lifecalc` (ref `qfcislqcszymihvyjrud`, Sydney). `budget/js/sync.js` keeps the whole budget as one JSON document per household:
+
+- `households(id, name, data jsonb, version, invite_code, updated_at, updated_by)` and `household_members(household_id, user_id, email, role)`, both with row-level security (members only).
+- RPCs: `create_household(name, data)`, `join_household(code)`, `save_household(id, data, version)` (returns the new version, or -1 if someone saved first).
+- Each phone works offline and saves ~1s after a change. On a version clash it re-reads the server copy and merges record by record (three-way, against the last synced copy), so edits to different items on both phones are kept.
+- Realtime pushes updates to the other phone. Per-phone settings (name, view, theme, tab) aren't shared.
+- The browser only holds the publishable key; access is enforced by RLS.

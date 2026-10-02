@@ -403,3 +403,7 @@ button.badge { cursor: pointer; }
 .swatches span { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); font-weight: 600; font-size: 14px; cursor: pointer; }
 .swatches i { width: 20px; height: 20px; border-radius: 50%; background: var(--sw); flex: 0 0 auto; }
 .swatches input:checked + span { border-color: var(--sw); box-shadow: inset 0 0 0 1px var(--sw); }
+
+/* Live sharing */
+.invite { font-size: 30px; font-weight: 700; letter-spacing: .14em; margin: 4px 0 2px; }
+.mt8 { margin-top: 8px; }

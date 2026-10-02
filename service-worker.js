@@ -1,6 +1,6 @@
 // One service worker for all of LifeCalc (calculator + /budget).
 // Network-first so updates pushed to GitHub Pages show up straight away; the cache is the offline fallback.
-const CACHE_NAME = "lifecalc-v31";
+const CACHE_NAME = "lifecalc-v32";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -17,6 +17,7 @@ const APP_SHELL = [
   "./budget/js/seed.js",
   "./budget/js/importer.js",
   "./budget/js/app.js",
+  "./budget/js/sync.js",
   "./theme.js"
 ];
 

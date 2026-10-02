@@ -20,7 +20,11 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function persist() { HF.recordNetWorth(S); if (!HF.save(S)) toast('Could not save — storage is full or blocked'); }
+  function persist() {
+    HF.recordNetWorth(S);
+    if (!HF.save(S)) toast('Could not save — storage is full or blocked');
+    if (HF.sync) HF.sync.changed();   // live sharing: send the change to the other phone
+  }
   function commit(msg) { persist(); render(); if (msg) toast(msg); }
   var toastTimer;
   function toast(msg) {
@@ -673,6 +677,7 @@
     var s = S.settings;
     var h = top('Settings');
     h += '<button class="card profile" data-act="profile" style="width:100%;text-align:left"><div class="avatar">' + esc(initials(s.householdName || s.userName)) + '</div><div style="flex:1"><b>' + esc(s.householdName || 'Household') + '</b><span class="muted small">Household account · ' + esc(s.userName || '') + '</span></div>' + icon('chev', 18, 'chev') + '</button>';
+    h += '<div class="list mt12">' + moreRow('sync', 'kids', 'Live sharing', HF.sync ? HF.sync.label() : 'Needs internet') + '</div>';
     h += '<div class="list mt12">' +
       moreRow('tab', 'transfer', 'Transactions', S.transactions.length + ' imported and cash entries', ' data-val="transactions"') +
       moreRow('settings', 'gear', 'Household settings', 'Manual cash in totals') +
@@ -682,7 +687,7 @@
       moreRow('manage-rules', 'tag', 'Merchant rules', S.rules.length + ' rules') +
       moreRow('manage-accounts', 'bank', 'Accounts', S.accounts.length + ' accounts') +
       moreRow('import', 'upload', 'Import statement', 'CSV or pasted lines') +
-      moreRow('share-data', 'upload', 'Send to Zhila', 'Share a copy by AirDrop, Messages or email') +
+      moreRow('share-data', 'upload', 'Send a copy', 'One-off copy by AirDrop, Messages or email') +
       moreRow('export', 'download', 'Export data', 'Download a JSON backup') +
       moreRow('restore', 'restore', 'Restore backup', 'Replaces current data') + '</div>';
     h += '<div class="list mt12">' + moreRow('appearance', 'palette', 'Appearance', { auto: 'Automatic', light: 'Light', dark: 'Dark' }[s.theme || 'auto'] + (window.LCTheme ? ' · ' + LCTheme.THEMES[LCTheme.get()].name : '')) +
@@ -1086,6 +1091,94 @@
   }
 
   // ---------- Data ----------
+  // ---------- Live sharing (Supabase) ----------
+  function syncErr(e) { var m = (e && e.message) || 'Something went wrong'; if (/fetch|network/i.test(m)) m = 'No connection. Try again when online'; toast(m); }
+  function openSync() {
+    var sy = HF.sync, st = sy && sy.state();
+    if (!sy || !st.ready) {
+      openSheet('Live sharing', '<div class="card pad">Live sharing needs an internet connection. Open the app while online and try again.</div>');
+      return;
+    }
+    var h;
+    if (!st.signedIn) {
+      h = '<p class="muted" style="margin-top:0">Share one budget with Zhila. Changes on either phone show on the other within seconds. Each of you signs in with your own email.</p>' +
+        '<label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" inputmode="email"></label>' +
+        '<label class="field"><span>Password</span><input name="password" type="password" autocomplete="current-password" placeholder="At least 6 characters"></label>' +
+        '<div class="btn-row mt12"><button class="btn accent" id="syIn">Sign in</button><button class="btn" id="syUp">Create account</button></div>';
+    } else if (!st.householdId) {
+      h = '<p class="muted" style="margin-top:0">Signed in as <b>' + esc(st.email) + '</b>.</p>' +
+        '<div class="card pad"><b>Start sharing this budget</b><p class="muted small">Uploads the budget on this phone and gives you an invite code for Zhila.</p><button class="btn accent block" id="syStart">Start sharing</button></div>' +
+        '<div class="card pad mt12"><b>Join a shared budget</b><p class="muted small">Enter the invite code. This replaces the budget on this phone with the shared one.</p>' +
+        '<label class="field"><span>Your name</span><input name="myname" autocomplete="given-name" placeholder="e.g. Zhila"></label>' +
+        '<label class="field"><span>Invite code</span><input name="code" autocapitalize="characters" placeholder="e.g. 7F3A9C21" style="text-transform:uppercase;letter-spacing:.1em"></label><button class="btn block" id="syJoin">Join</button></div>' +
+        '<button class="btn danger-text block mt12" id="syOut">Sign out</button>';
+    } else {
+      h = '<div class="card pad"><div class="lbl muted small">Status</div><b>' + esc(sy.label()) + '</b><div class="muted small mt8">Signed in as ' + esc(st.email) + '</div></div>' +
+        '<div class="card pad mt12"><div class="lbl muted small">Invite code</div><div class="invite num">' + esc(st.invite || '—') + '</div>' +
+        '<p class="muted small">Zhila: install LifeCalc, open Settings → Live sharing, create an account, then join with this code.</p><button class="btn accent block" id="syInvite">Send invite to Zhila</button></div>' +
+        '<div class="card pad mt12"><div class="lbl muted small">Members</div><div id="syMembers" class="muted">Loading…</div></div>' +
+        '<div class="btn-row mt12"><button class="btn" id="syNow">Sync now</button><button class="btn danger-text" id="syOut">Stop on this phone</button></div>' +
+        '<p class="muted small">Stopping signs this phone out. Its budget stays here; the shared copy stays online for Zhila.</p>';
+    }
+    openSheet('Live sharing', '<div id="syncSheet">' + h + '</div>', function (el) {
+      function q(id) { return el.querySelector(id); }
+      function busy(b, on) { if (b) { b.disabled = on; } }
+      function creds() { return [String(q('[name="email"]').value).trim(), q('[name="password"]').value]; }
+      if (q('#syIn')) q('#syIn').addEventListener('click', function () {
+        var c = creds(), b = this; busy(b, true);
+        sy.signIn(c[0], c[1]).then(function (hid) {
+          if (hid && confirm('You already share a budget. Load it on this phone? This replaces the budget here.')) return sy.useHousehold(hid).then(function () { toast('Shared budget loaded'); });
+        }).then(function () { openSync(); }).catch(function (e) { busy(b, false); syncErr(e); });
+      });
+      if (q('#syUp')) q('#syUp').addEventListener('click', function () {
+        var c = creds(), b = this;
+        if (!c[0] || c[1].length < 6) { toast('Enter an email and a password of 6+ characters'); return; }
+        busy(b, true);
+        sy.signUp(c[0], c[1]).then(function (r) {
+          if (r === 'confirm') { busy(b, false); toast('Check your email and tap the link, then come back and Sign in'); }
+          else openSync();
+        }).catch(function (e) { busy(b, false); syncErr(e); });
+      });
+      if (q('#syStart')) q('#syStart').addEventListener('click', function () {
+        var b = this; busy(b, true);
+        sy.start(S.settings.householdName || 'Household').then(function () { toast('Sharing is on'); openSync(); render(); }).catch(function (e) { busy(b, false); syncErr(e); });
+      });
+      if (q('#syJoin')) q('#syJoin').addEventListener('click', function () {
+        var code = String(q('[name="code"]').value).trim(), b = this;
+        if (!code) { toast('Enter the invite code'); return; }
+        if (!confirm('Join the shared budget? The budget on this phone is replaced by the shared one.')) return;
+        busy(b, true);
+        var me = String(q('[name="myname"]').value).trim();
+        sy.join(code).then(function () { if (me) { S.settings.userName = me; HF.save(S); render(); } toast('Joined. You’re sharing now'); openSync(); }).catch(function (e) { busy(b, false); syncErr(e); });
+      });
+      if (q('#syInvite')) q('#syInvite').addEventListener('click', function () {
+        var text = 'Join our LifeCalc budget:\n1. Open ' + st.appUrl + ' in Safari, tap Share → Add to Home Screen\n2. Open it → Settings → Live sharing → Create account\n3. Join with code ' + st.invite;
+        if (navigator.share) navigator.share({ title: 'LifeCalc budget', text: text }).catch(function () {});
+        else { try { navigator.clipboard.writeText(text); toast('Invite copied'); } catch (e) { toast('Code: ' + st.invite); } }
+      });
+      if (q('#syNow')) q('#syNow').addEventListener('click', function () { sy.pull().then(function () { toast('Synced'); openSync(); }); });
+      if (q('#syOut')) q('#syOut').addEventListener('click', function () {
+        if (!confirm('Stop live sharing on this phone? The budget stays on this phone.')) return;
+        sy.signOut().then(function () { toast('Signed out'); closeSheet(); render(); });
+      });
+      if (q('#syMembers')) sy.members().then(function (m) {
+        q('#syMembers').innerHTML = m.length ? m.map(function (x) { return esc(x.email || 'Member') + (x.role === 'owner' ? ' <span class="badge">Owner</span>' : ''); }).join('<br>') : 'Just you so far';
+      });
+    });
+  }
+  // Hooks for sync.js: read the state, replace it with the shared copy, refresh the status.
+  window.LCBudget = {
+    get: function () { return S; },
+    replace: function (data, keep) {
+      var local = S.settings || {}, next = HF.migrate(JSON.parse(JSON.stringify(data)));
+      next.settings = next.settings || {};
+      (keep || []).forEach(function (k) { if (k in local) next.settings[k] = local[k]; });
+      next.settings.includeBusiness = true; next.settings.mode = 'budget';
+      S = next; HF.recordNetWorth(S); HF.save(S); render();
+    },
+    syncChanged: function () { if (!ui.page && S.settings.tab === 'more') render(); }
+  };
+
   // Send a copy of everything (as a backup file) through the phone's share sheet. Zhila opens it with Restore backup.
   function shareData() {
     var name = 'lifecalc-budget-' + todayISO() + '.json';
@@ -1230,6 +1323,7 @@
     },
     export: exportData,
     'share-data': shareData,
+    sync: openSync,
     restore: function () { document.getElementById('restoreFile').click(); },
     reset: function () {
       if (!confirm('Reset everything to the starting figures? Imported transactions and edits will be lost. Export a backup first if unsure.')) return;
