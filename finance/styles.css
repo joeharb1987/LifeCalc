@@ -157,6 +157,7 @@ button { cursor: pointer; }
 .b-imported { background: #E4EAF7; color: #2C467F; }
 .b-calculated { background: #EDEBE6; color: #5B5A55; }
 .b-review { background: #FBEBD0; color: #855A0C; }
+.b-assumption { background: #F6E1DC; color: #8A3A2C; }
 .b-biz { background: #EDE7F3; color: #5A3E7A; }
 .b-off { background: #EDEBE6; color: #6E6C66; }
 .b-transfer { background: #EDEBE6; color: #5B5A55; }
@@ -168,6 +169,7 @@ button { cursor: pointer; }
   :root:not([data-theme="light"]) .b-calculated, :root:not([data-theme="light"]) .b-off, :root:not([data-theme="light"]) .b-transfer { background: #2A2E38; color: #B9BCC5; }
   :root:not([data-theme="light"]) .b-review { background: #3A2F17; color: #F0C774; }
   :root:not([data-theme="light"]) .b-biz { background: #31263F; color: #D2B8F0; }
+  :root:not([data-theme="light"]) .b-assumption { background: #3D2420; color: #F0B2A4; }
 }
 :root[data-theme="dark"] .b-statement, :root[data-theme="dark"] .b-imported { background: #24304F; color: #A9BDF0; }
 :root[data-theme="dark"] .b-statement_avg { background: #2C2747; color: #C3B6F0; }
@@ -175,6 +177,7 @@ button { cursor: pointer; }
 :root[data-theme="dark"] .b-calculated, :root[data-theme="dark"] .b-off, :root[data-theme="dark"] .b-transfer { background: #2A2E38; color: #B9BCC5; }
 :root[data-theme="dark"] .b-review { background: #3A2F17; color: #F0C774; }
 :root[data-theme="dark"] .b-biz { background: #31263F; color: #D2B8F0; }
+:root[data-theme="dark"] .b-assumption { background: #3D2420; color: #F0B2A4; }
 
 /* ---------- Category cards ---------- */
 .cat { overflow: hidden; }

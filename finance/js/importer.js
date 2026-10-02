@@ -1,4 +1,4 @@
-/* Household Finance — statement import: CSV / pasted text / PDF text parsing,
+/* Household Finance — statement import: CSV / pasted text parsing,
    merchant rules, internal transfer detection and de-duplication. */
 (function (root) {
   'use strict';
@@ -130,6 +130,7 @@
       if (amt == null || amt === 0) return;
       out.push({
         date: date,
+        dateRaw: String(r[dateCol]).trim(),
         description: String(descCol >= 0 ? r[descCol] : '').trim().replace(/\s+/g, ' '),
         amount: amt,
         accountHint: acctCol >= 0 ? String(r[acctCol] || '').trim() : ''
@@ -138,7 +139,7 @@
     return out;
   }
 
-  // ---------- Pasted text / PDF text ----------
+  // ---------- Pasted text ----------
   var CREDIT_WORDS = /\b(TRANSFER FROM|DEPOSIT|SALARY|WAGES|PAY\/SALARY|CENTRELINK|REFUND|INTEREST PAID|CREDIT|DIRECT CREDIT)\b/i;
   var AMOUNT_RE = /\(?-?\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?(?:\s?(?:CR|DR))?|\(?-?\$?\d+\.\d{2}\)?(?:\s?(?:CR|DR))?/gi;
 
@@ -164,48 +165,9 @@
       if (amt == null || amt === 0) return;
       var explicit = /-|\(|DR|CR/i.test(amtStr);
       if (!explicit) amt = CREDIT_WORDS.test(desc) ? Math.abs(amt) : -Math.abs(amt);
-      out.push({ date: date, description: desc, amount: amt, accountHint: '', signGuessed: !explicit });
+      out.push({ date: date, dateRaw: m[1], description: desc, amount: amt, accountHint: '', signGuessed: !explicit });
     });
     return out;
-  }
-
-  // PDF → text lines using pdf.js (loaded on demand from cdnjs).
-  var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
-  function loadPdfJs() {
-    if (root.pdfjsLib) return Promise.resolve(root.pdfjsLib);
-    return new Promise(function (resolve, reject) {
-      var s = document.createElement('script');
-      s.src = PDFJS + 'pdf.min.js';
-      s.onload = function () {
-        root.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
-        resolve(root.pdfjsLib);
-      };
-      s.onerror = function () { reject(new Error('Could not load the PDF reader. Check your connection.')); };
-      document.head.appendChild(s);
-    });
-  }
-  function pdfToText(arrayBuffer) {
-    return loadPdfJs().then(function (lib) {
-      return lib.getDocument({ data: arrayBuffer }).promise;
-    }).then(function (pdf) {
-      var pages = [];
-      for (var p = 1; p <= pdf.numPages; p++) pages.push(pdf.getPage(p).then(function (page) { return page.getTextContent(); }));
-      return Promise.all(pages);
-    }).then(function (contents) {
-      var all = [];
-      contents.forEach(function (tc) {
-        var rows = {};
-        tc.items.forEach(function (it) {
-          if (!it.str || !it.str.trim()) return;
-          var y = Math.round(it.transform[5] / 3) * 3;
-          (rows[y] = rows[y] || []).push({ x: it.transform[4], s: it.str });
-        });
-        Object.keys(rows).map(Number).sort(function (a, b) { return b - a; }).forEach(function (y) {
-          all.push(rows[y].sort(function (a, b) { return a.x - b.x; }).map(function (i) { return i.s; }).join('  '));
-        });
-      });
-      return all.join('\n');
-    });
   }
 
   // ---------- Rules ----------
@@ -223,33 +185,33 @@
 
   var TRANSFER_WORDS = /\b(TRANSFER|TFR|XFER|INTERNET BANKING|NETBANK|FUNDS TFER|INTERNAL)\b/i;
 
-  // Classify a parsed row against rules and owned accounts.
+  // Classify a parsed row against rules and owned accounts. Returns transaction fields.
   function classify(state, row) {
     var desc = row.description;
     var tx = {
-      categoryId: row.amount > 0 ? 'c_income' : null,
+      category_id: row.amount > 0 ? 'c_income' : null,
       merchant: cleanMerchant(desc),
-      internalTransfer: false, cashDeposit: false, oneOff: false
+      internal_transfer: false, cash_deposit: false, one_off: false
     };
     var rule = matchRule(state, desc);
     if (rule) {
       tx.merchant = rule.merchant || tx.merchant;
-      if (rule.categoryId) tx.categoryId = rule.categoryId;
-      if (rule.flag === 'cashDeposit') tx.cashDeposit = true;
-      if (rule.flag === 'internal') { tx.internalTransfer = true; tx.categoryId = 'c_transfer'; }
+      if (rule.categoryId) tx.category_id = rule.categoryId;
+      if (rule.flag === 'cashDeposit') tx.cash_deposit = true;
+      if (rule.flag === 'internal') { tx.internal_transfer = true; tx.category_id = 'c_transfer'; }
     }
     if (!rule && TRANSFER_WORDS.test(desc)) {
       var up = desc.toUpperCase();
       state.accounts.forEach(function (a) {
-        if (!a.owned || !a.match || a.id === row.accountId) return;
+        if (!a.owned || !a.match || a.id === row.account_id) return;
         var hit = a.match.split(',').some(function (k) { k = k.trim().toUpperCase(); return k && up.indexOf(k) >= 0; });
         if (!hit) return;
-        if (a.transferAs === 'savings' && row.amount < 0) { tx.categoryId = 'c_savings'; tx.merchant = a.name; }
-        else { tx.internalTransfer = true; tx.categoryId = 'c_transfer'; tx.merchant = 'Transfer — ' + a.name; }
+        if (a.transferAs === 'savings' && row.amount < 0) { tx.category_id = 'c_savings'; tx.merchant = a.name; }
+        else { tx.internal_transfer = true; tx.category_id = 'c_transfer'; tx.merchant = 'Transfer — ' + a.name; }
       });
     }
-    var cat = HF.catById(state, tx.categoryId);
-    if (cat && cat.type === 'oneoff') tx.oneOff = true;
+    var cat = HF.catById(state, tx.category_id);
+    if (cat && cat.type === 'oneoff') tx.one_off = true;
     return tx;
   }
 
@@ -262,23 +224,20 @@
   }
 
   function hash(tx) {
-    return [tx.date, Number(tx.amount).toFixed(2), String(tx.descriptionRaw).toUpperCase().replace(/\s+/g, ' ').trim(), tx.accountId || ''].join('|');
+    return [tx.date, Number(tx.amount).toFixed(2), String(tx.description_raw).toUpperCase().replace(/\s+/g, ' ').trim(), tx.account_id || ''].join('|');
   }
 
-  // Build transaction objects from parsed rows; flags duplicates against existing data.
+  // Build ledger transactions from parsed rows; flags duplicates against existing data.
   function prepare(state, rows, accountId) {
     var existing = {};
     state.transactions.forEach(function (t) { var h = t.hash || hash(t); existing[h] = (existing[h] || 0) + 1; });
     var seen = {};
     return rows.map(function (row) {
-      row.accountId = accountId;
-      var c = classify(state, row);
-      var tx = {
-        id: HF.uid('t'), date: row.date, descriptionRaw: row.description, merchant: c.merchant,
-        amount: Math.round(row.amount * 100) / 100, accountId: accountId, categoryId: c.categoryId,
-        source: 'imported', internalTransfer: c.internalTransfer, cashDeposit: c.cashDeposit,
-        oneOff: c.oneOff, recurring: false, notes: '', signGuessed: !!row.signGuessed
-      };
+      var c = classify(state, { description: row.description, amount: row.amount, account_id: accountId });
+      var tx = HF.newTransaction(Object.assign({
+        date: row.date, date_raw: row.dateRaw || row.date, description_raw: row.description,
+        amount: row.amount, account_id: accountId, source: 'imported', sign_guessed: !!row.signGuessed
+      }, c));
       tx.hash = hash(tx);
       // Identical rows within one statement are legitimate (two same coffees): the nth copy is
       // only a duplicate if saved data already holds at least n copies.
@@ -292,18 +251,18 @@
   function detectTransferPairs(state) {
     var owned = {};
     state.accounts.forEach(function (a) { if (a.owned) owned[a.id] = a; });
-    var txs = state.transactions.filter(function (t) { return owned[t.accountId] && !t.internalTransfer; });
+    var txs = state.transactions.filter(function (t) { return owned[t.account_id] && !t.internal_transfer; });
     var used = {}, count = 0;
     txs.forEach(function (a) {
       if (used[a.id] || a.amount >= 0) return;
       for (var i = 0; i < txs.length; i++) {
         var b = txs[i];
-        if (used[b.id] || b.id === a.id || b.accountId === a.accountId) continue;
+        if (used[b.id] || b.id === a.id || b.account_id === a.account_id) continue;
         if (Math.abs(b.amount + a.amount) > 0.001) continue;
         var days = Math.abs(HF.parseISO(a.date) - HF.parseISO(b.date)) / 864e5;
         if (days > 3) continue;
         used[a.id] = used[b.id] = 1;
-        [a, b].forEach(function (t) { t.internalTransfer = true; t.categoryId = 'c_transfer'; });
+        [a, b].forEach(function (t) { t.internal_transfer = true; t.category_id = 'c_transfer'; });
         count++;
         break;
       }
@@ -315,17 +274,17 @@
   function reapplyRules(state) {
     var changed = 0;
     state.transactions.forEach(function (t) {
-      if (t.source !== 'imported' || t.userEdited) return;
-      var c = classify(state, { description: t.descriptionRaw, amount: t.amount, accountId: t.accountId });
-      if (c.categoryId !== t.categoryId || c.merchant !== t.merchant) changed++;
-      Object.assign(t, { categoryId: c.categoryId, merchant: c.merchant, internalTransfer: c.internalTransfer, cashDeposit: c.cashDeposit, oneOff: c.oneOff });
+      if (t.source !== 'imported' || t.user_edited) return;
+      var c = classify(state, { description: t.description_raw, amount: t.amount, account_id: t.account_id });
+      if (c.category_id !== t.category_id || c.merchant !== t.merchant) changed++;
+      Object.assign(t, c);
     });
     return changed;
   }
 
   HF.importer = {
     parseDate: parseDate, parseAmount: parseAmount, parseCSV: parseCSV, parseText: parseText,
-    pdfToText: pdfToText, matchRule: matchRule, ruleMatches: ruleMatches, classify: classify,
+    matchRule: matchRule, ruleMatches: ruleMatches, classify: classify,
     prepare: prepare, detectTransferPairs: detectTransferPairs, reapplyRules: reapplyRules, hash: hash
   };
 })(typeof window !== 'undefined' ? window : globalThis);

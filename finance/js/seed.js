@@ -35,13 +35,14 @@
         id: 'i' + (++n), direction: direction, categoryId: categoryId, name: name,
         amount: amount, frequency: frequency, customWeeks: null,
         source: source, kind: frequency === 'oneoff' ? 'oneoff' : 'fixed',
-        active: true, scope: 'personal', review: false, provider: '', notes: ''
+        active: true, scope: 'personal', review: false, provider: '', notes: '',
+        startDate: null, endDate: null   // optional ISO dates; outside them the item isn't counted
       };
       return Object.assign(it, extra || {});
     }
     function inc(name, amount, freq, source, extra) { return item('in', 'c_income', name, amount, freq, source, extra); }
     function exp(cat, name, amount, freq, source, extra) { return item('out', cat, name, amount, freq, source, extra); }
-    var AVG = 'Statement average Jan–Sep 2026 (bank only, excludes cash).';
+    var AVG = 'Statement average Jan–Sep 2026, bank-only.';
     function avg(cat, name, amount, txCount, total, extra) {
       return exp(cat, name, amount, 'weekly', 'statement_avg', Object.assign({
         kind: 'variable',
@@ -77,7 +78,7 @@
       avg('c_transport', 'Tolls / parking / transport', 33.42, 66, 1303.23),
 
       // ----- Utilities & bills -----
-      exp('c_utilities', 'AGL — current electricity usage', 95, 'weekly', 'calculated', { provider: 'AGL', notes: 'Approx split of the $199/week AGL debit ($95 usage + $104 arrears). Statement transactions stay as actual $199.' }),
+      exp('c_utilities', 'AGL — electricity usage', 95, 'weekly', 'calculated', { provider: 'AGL', notes: 'Ongoing. Approx split of the $199/week AGL debit ($95 usage + $104 arrears). Statement transactions stay as the actual $199.' }),
       exp('c_utilities', 'EnergyAustralia repayment plan', 20, 'weekly', 'statement', { provider: 'EnergyAustralia (FRM FRANCOM)' }),
       exp('c_utilities', 'Joe phone — Telstra', 84, 'monthly', 'statement', { provider: 'Telstra' }),
       exp('c_utilities', 'Zhila phone — JB Hi-Fi Mobile', 99, 'monthly', 'statement', { provider: 'JB Hi-Fi Mobile' }),
@@ -94,15 +95,18 @@
       avg('c_shopping', 'Shopping / misc retail', 77.25, 63, 3012.74, { notes: AVG + ' Kmart, Amazon, Shein, Big W, TK Maxx, Reject Shop etc. 63 transactions, $3,012.74 total.' }),
       avg('c_health', 'Pharmacy / medical', 7.13, 11, 278.00),
 
+      // ----- Personal care -----
+      exp('c_personal', 'Joe PT (Vision PT)', 79.30, 'weekly', 'statement', { provider: 'Vision PT' }),
+
       // ----- Subscriptions -----
       exp('c_subs', 'Netflix', 9.99, 'monthly', 'manual'),
       exp('c_subs', 'Spotify', 22.99, 'monthly', 'manual'),
       exp('c_subs', 'Paramount+', 7.99, 'monthly', 'manual'),
       exp('c_subs', 'Amazon Prime', 9.99, 'monthly', 'manual'),
-      exp('c_subs', 'PlayStation', 14.95, 'monthly', 'manual', { notes: 'Approx.' }),
-      exp('c_subs', 'YouTube', 22.99, 'monthly', 'manual'),
+      exp('c_subs', 'PlayStation', 20.95, 'monthly', 'statement', { notes: 'Latest amount seen on statement.' }),
+      exp('c_subs', 'YouTube (via Apple)', 22.99, 'monthly', 'manual', { provider: 'Apple' }),
       exp('c_subs', 'iCloud', 14.99, 'monthly', 'manual'),
-      exp('c_subs', 'Google Storage', 4.49, 'monthly', 'manual'),
+      exp('c_subs', 'Google', 4.49, 'monthly', 'manual'),
       exp('c_subs', 'Samsung Electronic X', 5.99, 'monthly', 'statement', { review: true, notes: 'Needs identification.' }),
       exp('c_subs', 'Disney+', 0, 'monthly', 'manual', { active: false, notes: 'Cancelled.' }),
       exp('c_subs', 'Kayo', 0, 'monthly', 'manual', { active: false, notes: 'Cancelled.' }),
@@ -112,9 +116,9 @@
 
       // ----- Debt repayments -----
       exp('c_debt', 'Tesla — Angle Finance', 1174.68, 'monthly', 'statement', { provider: 'Angle Finance', notes: '$50,000 financed over 5 years.' }),
-      exp('c_debt', 'AGL arrears repayment', 104, 'weekly', 'calculated', { provider: 'AGL', notes: 'Arrears part of the $199/week AGL debit. Balance ~$2,055.30.' }),
+      exp('c_debt', 'AGL arrears repayment', 104, 'weekly', 'calculated', { provider: 'AGL', endDate: '2027-02-28', notes: 'Arrears part of the $199/week AGL debit. Balance ~$2,055.30 ÷ $104/wk ≈ 20 weeks, so ends around Feb 2027.' }),
       exp('c_debt', 'Latitude GO', 332.14, 'monthly', 'manual', { provider: 'Latitude', notes: 'Minimum repayment as target. Actual debits vary ($326–$438). Interest ~$281/month at 28.99%.' }),
-      exp('c_debt', 'Zip Money / Zip Pay', 0, 'monthly', 'manual', { provider: 'Zip', review: true, notes: 'No fixed amount — payments have been irregular ($150 and smaller). Set a target if you want one.' }),
+      exp('c_debt', 'Zip', 150, 'monthly', 'assumption', { provider: 'Zip', notes: 'Assumption: $150/month. Actual Zip Money payments have been irregular ($150 and smaller).' }),
       exp('c_debt', 'Revenue NSW — personal', 30, 'fortnightly', 'statement', { provider: 'Revenue NSW' }),
       exp('c_debt', 'Revenue NSW — JZD', 50, 'fortnightly', 'statement', { provider: 'Revenue NSW', scope: 'business' }),
 
@@ -129,8 +133,8 @@
       exp('c_savings', 'Bella savings', 50, 'weekly', 'manual'),
 
       // ----- Business software -----
-      exp('c_business', 'Lovable', 21.95, 'monthly', 'statement', { scope: 'business', notes: 'Approx.' }),
-      exp('c_business', 'Vercel', 30.75, 'monthly', 'statement', { scope: 'business', notes: 'Approx.' }),
+      exp('c_business', 'Lovable', 21.95, 'monthly', 'statement', { scope: 'business' }),
+      exp('c_business', 'Vercel', 30.75, 'monthly', 'statement', { scope: 'business' }),
       exp('c_business', 'OpenAI', 0, 'monthly', 'statement', { scope: 'business', kind: 'variable', review: true, notes: 'Variable — set an amount.' }),
 
       // ----- One-offs (never in recurring burn) -----
@@ -215,16 +219,17 @@
       rule('CASH DEPOSIT', 'Cash deposit', 'c_income', 'cashDeposit')
     ];
 
+    // Debt fields: balance, rate (% p.a.), payment + frequency, endDate (optional ISO), scope personal|business.
     var debts = [
       { id: 'd_latitude', name: 'Latitude GO', balance: 12077.75, limit: 12000, rate: 28.99, payment: 332.14, frequency: 'monthly', scope: 'personal', active: true, notes: 'Over limit. Recent interest ~$281.06/month. Minimum $332.14.' },
-      { id: 'd_zipmoney', name: 'Zip Money', balance: 4080.18, limit: null, rate: null, payment: 0, frequency: 'monthly', scope: 'personal', active: true, notes: 'Payments irregular ($150 and smaller).' },
+      { id: 'd_zipmoney', name: 'Zip Money', balance: 4080.18, limit: null, rate: null, payment: 150, frequency: 'monthly', scope: 'personal', active: true, notes: 'Repayment is an assumption ($150/month) — actual payments irregular.' },
       { id: 'd_zippay', name: 'Zip Pay', balance: 634.58, limit: null, rate: null, payment: 0, frequency: 'monthly', scope: 'personal', active: true, notes: '' },
-      { id: 'd_agl', name: 'AGL arrears', balance: 2055.30, limit: null, rate: 0, payment: 104, frequency: 'weekly', scope: 'personal', active: true, notes: 'Arrears part of the $199/week AGL plan.' },
+      { id: 'd_agl', name: 'AGL arrears', balance: 2055.30, limit: null, rate: 0, payment: 104, frequency: 'weekly', scope: 'personal', active: true, endDate: '2027-02-28', notes: 'Arrears part of the $199/week AGL plan. Ends around Feb 2027.' },
       { id: 'd_tesla', name: 'Tesla — Angle Finance', balance: null, limit: null, rate: null, payment: 1174.68, frequency: 'monthly', scope: 'personal', active: true, notes: '$50,000 financed over 5 years. Add current payout balance.' },
       { id: 'd_rnsw_p', name: 'Revenue NSW — personal', balance: null, limit: null, rate: 0, payment: 30, frequency: 'fortnightly', scope: 'personal', active: true, notes: '' },
       { id: 'd_rnsw_jzd', name: 'Revenue NSW — JZD', balance: null, limit: null, rate: 0, payment: 50, frequency: 'fortnightly', scope: 'business', active: true, notes: '' },
       { id: 'd_ato_p', name: 'Personal ATO', balance: null, limit: null, rate: null, payment: 118, frequency: 'fortnightly', scope: 'personal', active: true, notes: '' },
-      { id: 'd_ato_jzd', name: 'JZD ATO', balance: null, limit: null, rate: null, payment: 316, frequency: 'fortnightly', scope: 'business', active: true, notes: 'Two plans: $228 + $88 fortnightly.' }
+      { id: 'd_ato_jzd', name: 'JZD ATO', balance: 25209.75, limit: null, rate: null, payment: 316, frequency: 'fortnightly', scope: 'business', active: true, notes: 'Two plans: $228 + $88 fortnightly.' }
     ];
 
     var D = '2026-09-30';
@@ -249,13 +254,15 @@
       asset('as_bond', 'Rental bond', 'other', 4000, { notes: 'Deposit held — an asset, not lifestyle spending.' })
     ];
 
+    debts.forEach(function (d) { if (!('endDate' in d)) d.endDate = null; });
+
     return {
-      version: 1,
+      version: 2,
       settings: {
         view: 'weekly',          // weekly | monthly | yearly
-        mode: 'normalised',      // actual | recurring | normalised
+        mode: 'budget',          // budget | actual
         expView: 'categories',   // all | categories
-        includeBusiness: false,  // business software in household burn
+        includeBusiness: false,  // business / trust items (JZD ATO, Revenue NSW JZD, software) in totals
         includeCash: true,       // manual cash items in totals
         nwScope: 'household',    // household | all
         tab: 'budget'

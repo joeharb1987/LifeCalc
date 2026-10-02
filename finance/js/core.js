@@ -131,15 +131,63 @@
       return true;
     } catch (e) { return false; }
   }
+  var TX_RENAMES = {
+    descriptionRaw: 'description_raw', accountId: 'account_id', categoryId: 'category_id', internalTransfer: 'internal_transfer',
+    cashDeposit: 'cash_deposit', oneOff: 'one_off', signGuessed: 'sign_guessed', userEdited: 'user_edited'
+  };
   function migrate(state) {
-    // Fill anything added after first release so older saves keep working.
     var seed = root.HF.seed();
+    var from = state.version || 1;
     ['categories', 'items', 'accounts', 'transactions', 'rules', 'debts', 'assets'].forEach(function (k) {
       if (!Array.isArray(state[k])) state[k] = seed[k];
     });
+    if (from < 2) {
+      // V1 was never released: take the corrected seed figures, keep any transactions.
+      state.items = seed.items;
+      state.debts = seed.debts;
+      state.transactions = state.transactions.map(function (t) {
+        var n = {};
+        Object.keys(t).forEach(function (k) { n[TX_RENAMES[k] || k] = t[k]; });
+        return newTransaction(n);
+      });
+      if (state.settings && state.settings.mode !== 'actual') state.settings.mode = 'budget';
+    }
     state.settings = Object.assign({}, seed.settings, state.settings || {});
     state.version = seed.version;
     return state;
+  }
+
+  // ---------- Ledger records ----------
+  // Transaction: one row per bank/cash movement. Amount is signed (+ in, − out); direction mirrors it.
+  // budget_week is the Monday of the week it counts toward — normally the week of `date`, but it can be
+  // moved so split payments (e.g. 2 × $99 dance) group into one budget week.
+  function newTransaction(f) {
+    f = f || {};
+    var date = f.date || toISO(new Date());
+    var amount = f.amount === '' ? '' : Math.round((Number(f.amount) || 0) * 100) / 100;
+    return {
+      id: f.id || uid('t'),
+      date: date,
+      date_raw: f.date_raw != null ? f.date_raw : date,
+      budget_week: f.budget_week || toISO(weekStart(parseISO(date))),
+      description_raw: f.description_raw || '',
+      merchant: f.merchant || '',
+      amount: amount,
+      direction: f.direction || (amount > 0 ? 'in' : 'out'),
+      account_id: f.account_id || null,
+      category_id: f.category_id || null,
+      subcategory: f.subcategory || null,
+      source: f.source || 'imported',          // imported | cash | manual
+      internal_transfer: !!f.internal_transfer,
+      cash_deposit: !!f.cash_deposit,
+      one_off: !!f.one_off,
+      recurring: !!f.recurring,
+      recurring_group: f.recurring_group || null,
+      notes: f.notes || '',
+      hash: f.hash || null,
+      sign_guessed: !!f.sign_guessed,
+      user_edited: !!f.user_edited
+    };
   }
 
   // ---------- Category helpers ----------
@@ -165,62 +213,109 @@
   }
 
   // ---------- Budget calculations ----------
-  // mode: recurring | normalised  (actual is computed from transactions)
-  function itemIncluded(state, item, mode) {
-    if (!item.active) return false;
-    var s = state.settings;
-    if (!s.includeCash && item.source === 'cash') return false;
-    if (item.direction === 'in') return true;
+  function todayISO() { return toISO(new Date()); }
+  function isBusiness(state, item) {
+    if (item.scope === 'business') return true;
     var cat = catById(state, item.categoryId);
-    if (cat && cat.type === 'business' && !s.includeBusiness) return false;
-    if (item.frequency === 'oneoff' || item.kind === 'oneoff' || (cat && cat.type === 'oneoff')) return false;
-    if (mode === 'recurring' && item.kind === 'variable') return false;
-    return true;
+    return !!(cat && cat.type === 'business');
   }
+  function isOneOff(state, item) {
+    var cat = catById(state, item.categoryId);
+    return item.frequency === 'oneoff' || item.kind === 'oneoff' || !!(cat && cat.type === 'oneoff');
+  }
+  // Why an item isn't in the totals today ('' = counted).
+  function excludedReason(state, item, asOf) {
+    asOf = asOf || todayISO();
+    var s = state.settings;
+    if (!item.active) return 'Inactive';
+    if (item.startDate && item.startDate > asOf) return 'Starts ' + fmtDate(item.startDate, true);
+    if (item.endDate && item.endDate < asOf) return 'Ended';
+    if (!s.includeCash && item.source === 'cash') return 'Cash hidden';
+    if (isBusiness(state, item) && !s.includeBusiness) return 'Business';
+    if (item.direction === 'out' && isOneOff(state, item)) return 'One-off';
+    return '';
+  }
+  function itemIncluded(state, item, asOf) { return !excludedReason(state, item, asOf); }
 
-  function budgetSummary(state, view, mode) {
-    var income = 0, expenses = 0;
+  function budgetSummary(state, view, asOf) {
+    var income = 0, expenses = 0, fixed = 0, variable = 0, cashIncome = 0, business = 0;
     var byType = { living: 0, debt: 0, tax: 0, savings: 0, business: 0 };
     var byCat = {};
     state.items.forEach(function (item) {
-      if (!itemIncluded(state, item, mode)) return;
+      var reason = excludedReason(state, item, asOf);
       var v = convert(item.amount, item.frequency, item.customWeeks, view);
-      if (item.direction === 'in') { income += v; return; }
+      if (reason === 'Business') business += v;
+      if (reason) return;
+      if (item.direction === 'in') { income += v; if (item.source === 'cash') cashIncome += v; return; }
       expenses += v;
+      if (item.kind === 'variable') variable += v; else fixed += v;
       var cat = catById(state, item.categoryId);
       var t = cat ? cat.type : 'living';
       if (byType[t] != null) byType[t] += v;
       byCat[item.categoryId] = (byCat[item.categoryId] || 0) + v;
     });
-    return { income: income, expenses: expenses, available: income - expenses, byType: byType, byCat: byCat };
+    return {
+      income: income, expenses: expenses, available: income - expenses, byType: byType, byCat: byCat,
+      fixed: fixed, variable: variable, cashIncome: cashIncome, businessExcluded: business,
+      cashSpendingEntered: cashSpendingEntered(state)
+    };
+  }
+
+  // True once any manual cash spending exists (a cash budget item or a cash transaction going out).
+  function cashSpendingEntered(state) {
+    return state.items.some(function (i) { return i.active && i.direction === 'out' && i.source === 'cash' && Number(i.amount) > 0; }) ||
+      state.transactions.some(function (t) { return t.source === 'cash' && t.amount < 0 && !t.internal_transfer; });
+  }
+
+  // Items that start or stop within the next `months` months — what changes the budget ahead.
+  function upcomingChanges(state, view, months, asOf) {
+    asOf = asOf || todayISO();
+    var d = parseISO(asOf); d.setMonth(d.getMonth() + (months || 12));
+    var horizon = toISO(d), out = [];
+    state.items.forEach(function (item) {
+      if (!item.active || isOneOff(state, item)) return;
+      if (isBusiness(state, item) && !state.settings.includeBusiness) return;
+      var v = convert(item.amount, item.frequency, item.customWeeks, view);
+      var sign = item.direction === 'in' ? 1 : -1;
+      if (item.endDate && item.endDate >= asOf && item.endDate <= horizon) out.push({ date: item.endDate, item: item, change: -sign * v, kind: 'ends' });
+      if (item.startDate && item.startDate > asOf && item.startDate <= horizon) out.push({ date: item.startDate, item: item, change: sign * v, kind: 'starts' });
+    });
+    return out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
   }
 
   // ---------- Transaction (actual) calculations ----------
   function txExcluded(state, tx) {
-    if (tx.internalTransfer || tx.cashDeposit) return true;
-    var cat = catById(state, tx.categoryId);
+    if (tx.internal_transfer || tx.cash_deposit) return true;
+    var cat = catById(state, tx.category_id);
     if (cat && EXCLUDED_TYPES[cat.type]) return true;
     if (!state.settings.includeCash && tx.source === 'cash') return true;
     if (cat && cat.type === 'business' && !state.settings.includeBusiness) return true;
     return false;
   }
 
-  function actualSummary(state, range) {
+  // Weekly periods group by budget_week (so moved split payments land together); others by date.
+  function txWeek(tx) { return tx.budget_week || toISO(weekStart(parseISO(tx.date))); }
+  function txInRange(tx, range, view) {
+    if (view === 'weekly') return txWeek(tx) === range.start;
+    return tx.date >= range.start && tx.date <= range.end;
+  }
+
+  function actualSummary(state, range, view) {
     var income = 0, expenses = 0, byCat = {}, count = 0, oneoffs = 0;
     var byType = { living: 0, debt: 0, tax: 0, savings: 0, business: 0, oneoff: 0 };
     state.transactions.forEach(function (tx) {
-      if (tx.date < range.start || tx.date > range.end) return;
+      if (!txInRange(tx, range, view)) return;
       if (txExcluded(state, tx)) return;
       count++;
       var amt = Number(tx.amount) || 0;
       if (amt > 0) { income += amt; return; }
       var out = -amt;
       expenses += out;
-      var cat = catById(state, tx.categoryId);
+      var cat = catById(state, tx.category_id);
       var t = cat ? cat.type : 'living';
-      if (tx.oneOff || t === 'oneoff') oneoffs += out;
+      if (tx.one_off || t === 'oneoff') oneoffs += out;
       if (byType[t] != null) byType[t] += out;
-      var key = tx.categoryId || 'uncategorised';
+      var key = tx.category_id || 'uncategorised';
       byCat[key] = (byCat[key] || 0) + out;
     });
     return { income: income, expenses: expenses, available: income - expenses, byCat: byCat, byType: byType, count: count, oneoffs: oneoffs };
@@ -231,13 +326,13 @@
     var buckets = {};
     state.transactions.forEach(function (tx) {
       if (txExcluded(state, tx)) return;
-      var k = periodKey(view, tx.date);
+      var k = view === 'weekly' ? txWeek(tx) : periodKey(view, tx.date);
       var b = buckets[k] || (buckets[k] = { key: k, income: 0, expenses: 0, savings: 0 });
       var amt = Number(tx.amount) || 0;
       if (amt > 0) b.income += amt;
       else {
         b.expenses += -amt;
-        var cat = catById(state, tx.categoryId);
+        var cat = catById(state, tx.category_id);
         if (cat && cat.type === 'savings') b.savings += -amt;
       }
     });
@@ -281,8 +376,9 @@
     parseISO: parseISO, toISO: toISO, weekStart: weekStart, periodRange: periodRange, periodKey: periodKey,
     periodLabel: periodLabel, periodShortLabel: periodShortLabel, fmtDate: fmtDate, MONTHS: MONTHS,
     load: load, save: save, migrate: migrate,
-    catById: catById, itemIncluded: itemIncluded, budgetSummary: budgetSummary,
-    txExcluded: txExcluded, actualSummary: actualSummary, history: history,
+    catById: catById, itemIncluded: itemIncluded, excludedReason: excludedReason, isBusiness: isBusiness, isOneOff: isOneOff,
+    budgetSummary: budgetSummary, cashSpendingEntered: cashSpendingEntered, upcomingChanges: upcomingChanges,
+    newTransaction: newTransaction, txExcluded: txExcluded, txInRange: txInRange, actualSummary: actualSummary, history: history,
     payoffMonths: payoffMonths, netWorth: netWorth
   });
 })(typeof window !== 'undefined' ? window : globalThis);

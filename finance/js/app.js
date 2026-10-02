@@ -49,7 +49,7 @@
     { id: 'networth', label: 'Net Worth', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M5 16l4-5 4 3 6-8"/><path d="M15 6h4v4"/></svg>' },
     { id: 'more', label: 'More', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>' }
   ];
-  var SOURCE_LABEL = { statement: 'Statement', statement_avg: 'Statement avg', cash: 'Manual cash', manual: 'Manual', imported: 'Imported', calculated: 'Calculated' };
+  var SOURCE_LABEL = { statement: 'Statement', statement_avg: 'Statement avg', cash: 'Manual cash', manual: 'Manual', imported: 'Imported', calculated: 'Calculated', assumption: 'Assumption' };
   function badge(cls, text) { return '<span class="badge b-' + cls + '">' + esc(text) + '</span>'; }
   function srcBadge(src) { return badge(src, SOURCE_LABEL[src] || src); }
   function seg(name, options, current, cls) {
@@ -77,28 +77,32 @@
 
   // ===================== BUDGET =====================
   var MODE_HELP = {
-    actual: 'Everything that actually happened in your imported statements and manual cash entries.',
-    recurring: 'Only normal recurring costs. Excludes statement-average spending and one-offs.',
-    normalised: 'Recurring costs + normal variable spending (statement averages). Excludes one-offs.'
+    budget: 'Recurring costs plus statement-average variable spending (Jan–Sep 2026, bank-only). One-offs are listed but not counted.',
+    actual: 'Everything that actually happened in your imported statements and manual cash entries.'
   };
+  var AVG_LABEL = 'Statement average Jan–Sep 2026, bank-only';
 
   function renderBudget() {
     var s = S.settings;
     var h = '<header class="page-head"><div><h1>Budget</h1><p>Money in → money out → money left</p></div>' +
       '<button class="head-btn" data-act="overview" aria-label="Expense overview">' + I.pie + '</button></header>';
-    h += '<div class="controls">' + seg('mode', [['actual', 'Actual'], ['recurring', 'Recurring'], ['normalised', 'Normalised']], s.mode, 'gold small') +
-      seg('view', [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']], s.view) + '</div>';
+    h += '<div class="controls">' + seg('view', [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['yearly', 'Yearly']], s.view) +
+      '<div class="grid2">' + seg('mode', [['budget', 'Budget'], ['actual', 'Actual']], s.mode, 'gold small') +
+      seg('includeBusiness', [['false', 'Household'], ['true', '+ Business']], String(!!s.includeBusiness), 'gold small') + '</div></div>';
     if (s.mode === 'actual') return h + renderActual();
 
-    var sum = HF.budgetSummary(S, s.view, s.mode);
+    var sum = HF.budgetSummary(S, s.view);
     var w = VIEW_WORD[s.view];
+    var basis = sum.cashSpendingEntered ? 'Bank + manual cash spending' : 'Bank-only – cash spending not entered';
     h += '<div class="summary">' +
       '<button class="stat" data-act="jump" data-val="earnings"><div class="lbl"><span class="dot" style="background:var(--good)"></span>Earnings</div><div class="val num">' + money(sum.income) + '</div><div class="sub">per ' + w + '</div></button>' +
       '<button class="stat" data-act="overview"><div class="lbl"><span class="dot" style="background:var(--gold)"></span>Expenses</div><div class="val num">' + money(sum.expenses) + '</div><div class="sub">per ' + w + '</div></button>' +
       '<div class="stat hero"><div class="lbl">Available</div><div class="val num ' + (sum.available < 0 ? 'neg' : '') + '">' + money(sum.available) + '</div>' +
-      '<div class="sub">left per ' + w + ' after everything below · ' + (s.mode === 'recurring' ? 'recurring only' : 'normalised') + '</div>' +
-      heroSplit(sum.byType) + '</div></div>';
-    h += '<p class="muted" style="font-size:12.5px;margin:4px 4px 0">' + MODE_HELP[s.mode] + '</p>';
+      '<div class="sub" style="color:#E2B672;font-weight:700">' + basis + '</div>' +
+      (sum.cashIncome && !sum.cashSpendingEntered ? '<div class="sub">' + cashIncomeText(sum.cashIncome) + ' of income is cash, with no cash spending against it yet.</div>' : '') +
+      '<div class="sub">' + (s.includeBusiness ? 'Household + business / trust' : 'Household only') + ' · per ' + w + '</div>' +
+      heroSplit(sum) + '</div></div>';
+    h += '<p class="muted" style="font-size:12.5px;margin:4px 4px 0">' + MODE_HELP.budget + '</p>';
     h += budgetNotes(sum);
 
     // Earnings
@@ -115,58 +119,60 @@
     h += '</section>';
     return h;
   }
+  // Cash income is always quoted yearly so "$47.8k/yr" reads the same in every view.
+  function cashIncomeText(perView) {
+    var yr = perView * ({ weekly: 52, monthly: 12, yearly: 1 })[S.settings.view];
+    return 'About $' + (yr / 1000).toFixed(1) + 'k/yr';
+  }
 
-  function heroSplit(t) {
+  function heroSplit(sum) {
+    var t = sum.byType;
     var parts = [['Lifestyle', t.living], ['Debt', t.debt], ['Tax & gov', t.tax], ['Savings', t.savings]];
     if (S.settings.includeBusiness) parts.push(['Business', t.business]);
-    return '<div style="display:grid;grid-template-columns:repeat(' + parts.length + ',1fr);gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(245,241,231,.14)">' +
+    var line = 'rgba(245,241,231,.14)', dim = 'rgba(245,241,231,.6)';
+    return '<div style="display:grid;grid-template-columns:repeat(' + parts.length + ',1fr);gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid ' + line + '">' +
       parts.map(function (p) {
-        return '<div><div style="font-size:11px;color:rgba(245,241,231,.6);font-weight:600">' + p[0] + '</div><div class="num" style="font-weight:700;font-size:14px;margin-top:2px">' + money(p[1], { dp: 0 }) + '</div></div>';
-      }).join('') + '</div>';
+        return '<div><div style="font-size:11px;color:' + dim + ';font-weight:600">' + p[0] + '</div><div class="num" style="font-weight:700;font-size:14px;margin-top:2px">' + money(p[1], { dp: 0 }) + '</div></div>';
+      }).join('') + '</div>' + (sum.fixed == null ? '' :
+      '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid ' + line + ';font-size:12px;color:' + dim + '">' +
+      '<span>Fixed <b class="num" style="color:var(--navy-ink)">' + money(sum.fixed, { dp: 0 }) + '</b></span>' +
+      '<span>Statement averages <b class="num" style="color:var(--navy-ink)">' + money(sum.variable, { dp: 0 }) + '</b></span></div>');
   }
 
   function budgetNotes(sum) {
     var s = S.settings, out = [];
-    var biz = 0, oneoffs = 0, review = 0, cash = 0;
+    var oneoffs = 0, review = 0, cashHidden = 0;
     S.items.forEach(function (it) {
       if (!it.active) return;
-      var c = cat(it.categoryId);
-      if (it.direction === 'out' && c && c.type === 'business') biz += HF.convert(it.amount, it.frequency, it.customWeeks, s.view);
-      if (it.direction === 'out' && (it.frequency === 'oneoff' || (c && c.type === 'oneoff'))) oneoffs += Number(it.amount) || 0;
+      if (it.direction === 'out' && HF.isOneOff(S, it)) oneoffs += Number(it.amount) || 0;
       if (it.review) review++;
-      if (it.source === 'cash') cash++;
+      if (it.source === 'cash') cashHidden++;
     });
-    if (!s.includeBusiness && biz > 0) out.push('<b>Business software</b> (' + money(biz) + VIEW_SHORT[s.view] + ') is excluded from household burn.');
+    if (!s.includeBusiness && sum.businessExcluded > 0) out.push('<b>Business / trust</b> costs (' + money(sum.businessExcluded) + VIEW_SHORT[s.view] + ' — JZD ATO, Revenue NSW JZD, software) are excluded from household burn.');
+    HF.upcomingChanges(S, s.view, 12).forEach(function (c) {
+      out.push('<b>' + esc(c.item.name) + '</b> ' + c.kind + ' ' + HF.fmtDate(c.date, true) + ' → Available ' + (c.change >= 0 ? '+' : '−') + money(Math.abs(c.change)) + VIEW_SHORT[s.view] + '.');
+    });
     if (oneoffs > 0) out.push('<b>One-offs</b> (' + money(oneoffs) + ' total) are not in the recurring numbers.');
-    if (!s.includeCash && cash) out.push('<b>Manual cash</b> items are hidden from totals (bank-derived only).');
+    if (!s.includeCash && cashHidden) out.push('<b>Manual cash</b> items are hidden from totals (bank-derived only).');
     if (review) out.push('<b>' + review + ' item' + (review > 1 ? 's' : '') + '</b> flagged to review.');
     return out.length ? '<div class="note">' + out.join('<br>') + ' <a href="#" data-act="tab" data-val="more" style="color:var(--gold-ink)">Settings</a></div>' : '';
   }
 
-  function itemNotCountedReason(it) {
-    if (!it.active) return 'Inactive';
-    if (!S.settings.includeCash && it.source === 'cash') return 'Cash hidden';
-    if (it.direction === 'in') return '';
-    var c = cat(it.categoryId);
-    if (c && c.type === 'business' && !S.settings.includeBusiness) return 'Excluded';
-    if (it.frequency === 'oneoff' || it.kind === 'oneoff' || (c && c.type === 'oneoff')) return 'One-off';
-    if (S.settings.mode === 'recurring' && it.kind === 'variable') return 'Not recurring';
-    return '';
-  }
-
   function itemRow(it, showCat) {
     var view = S.settings.view;
-    var reason = itemNotCountedReason(it);
+    var reason = HF.excludedReason(S, it);
     var isOne = it.frequency === 'oneoff';
     var conv = isOne ? Number(it.amount) || 0 : HF.convert(it.amount, it.frequency, it.customWeeks, view);
     var c = cat(it.categoryId);
     var subBits = [srcBadge(it.source)];
     if (it.kind === 'variable' && it.source !== 'statement_avg') subBits.push(badge('calculated', 'Variable'));
-    if (it.scope === 'business') subBits.push(badge('biz', 'Business'));
+    if (HF.isBusiness(S, it) && reason !== 'Business') subBits.push(badge('biz', 'Business'));
     if (it.review) subBits.push(badge('review', 'Review'));
-    if (reason) subBits.push(badge('off', reason));
+    if (reason) subBits.push(badge(reason === 'Business' ? 'biz' : 'off', reason === 'Business' ? 'Business · excluded' : reason));
+    if (it.endDate && !reason) subBits.push(badge('calculated', 'Ends ' + HF.fmtDate(it.endDate, true)));
     var srcAmt = (Number(it.amount) ? money(it.amount, { cents: true, dp: 2 }) : '—') + ' ' + HF.freqLabel(it);
     subBits.push('<span>' + esc(srcAmt) + (showCat && c ? ' · ' + esc(c.name) : (it.provider ? ' · ' + esc(it.provider) : '')) + '</span>');
+    if (it.source === 'statement_avg') subBits.push('<span style="flex-basis:100%">' + AVG_LABEL + '</span>');
     return '<div class="row ' + (!it.active ? 'inactive' : reason ? 'excluded' : '') + '">' +
       '<div class="main" data-act="edit-item" data-id="' + it.id + '" style="cursor:pointer"><div class="name">' + esc(it.name) + '</div><div class="sub">' + subBits.join('') + '</div></div>' +
       '<div class="amt num ' + (it.direction === 'in' ? 'pos' : '') + '">' + (Number(it.amount) ? money(conv) : '—') + '<small>' + (isOne ? 'once' : VIEW_SHORT[view]) + '</small></div>' +
@@ -178,7 +184,7 @@
     var items = S.items.filter(function (i) { return i.direction === 'out'; });
     if (!items.length) return emptyBlock('🧾', 'No expenses yet', 'Add your first expense.', '');
     items.sort(function (a, b) {
-      var ra = itemNotCountedReason(a) ? 1 : 0, rb = itemNotCountedReason(b) ? 1 : 0;
+      var ra = HF.excludedReason(S, a) ? 1 : 0, rb = HF.excludedReason(S, b) ? 1 : 0;
       if (ra !== rb) return ra - rb;
       return HF.convert(b.amount, b.frequency, b.customWeeks, view) - HF.convert(a.amount, a.frequency, a.customWeeks, view);
     });
@@ -187,29 +193,29 @@
 
   function renderCategoryCards() {
     var s = S.settings, view = s.view;
-    var sum = HF.budgetSummary(S, view, s.mode);
+    var sum = HF.budgetSummary(S, view);
     var h = '';
     expenseCats().forEach(function (c) {
       var items = S.items.filter(function (i) { return i.direction === 'out' && i.categoryId === c.id; });
       if (!items.length) return;
       var total = sum.byCat[c.id] || 0;
-      var counted = items.filter(function (i) { return !itemNotCountedReason(i); }).length;
+      var counted = items.filter(function (i) { return !HF.excludedReason(S, i); }).length;
       var excluded = c.type === 'business' && !s.includeBusiness;
       var isOne = c.type === 'oneoff';
       var oneTotal = isOne ? items.reduce(function (a, i) { return a + (i.active ? Number(i.amount) || 0 : 0); }, 0) : 0;
-      var subText = items.length + ' expense' + (items.length > 1 ? 's' : '') + (counted !== items.length && !isOne ? ' · ' + counted + ' counted' : '') +
-        (excluded ? ' · excluded from burn' : '') + (isOne ? ' · not in recurring burn' : '');
+      var subText = items.length + ' expense' + (items.length > 1 ? 's' : '') + (counted !== items.length && !isOne && !excluded ? ' · ' + counted + ' counted' : '') +
+        (excluded ? ' · business, excluded' : '') + (isOne ? ' · not in recurring burn' : '');
       var open = ui.open[c.id];
       h += '<div class="card cat ' + (open ? 'open' : '') + '"><button class="cat-head" data-act="toggle-cat" data-id="' + c.id + '" aria-expanded="' + !!open + '">' +
         '<div class="emoji">' + esc(c.icon || '•') + '</div><div class="main"><div class="name">' + esc(c.name) + '</div><div class="sub">' + subText + '</div></div>' +
-        '<div class="amt num" style="' + (excluded || isOne ? 'color:var(--muted)' : '') + '">' + money(isOne ? oneTotal : excluded ? businessTotal(c.id) : total) + '<small>' + (isOne ? 'total' : VIEW_SHORT[view]) + '</small></div>' + I.chev + '</button>' +
+        '<div class="amt num" style="' + (excluded || isOne ? 'color:var(--muted)' : '') + '">' + money(isOne ? oneTotal : excluded ? activeTotal(items) : total) + '<small>' + (isOne ? 'total' : VIEW_SHORT[view]) + '</small></div>' + I.chev + '</button>' +
         '<div class="cat-body">' + items.map(function (it) { return itemRow(it, false); }).join('') + catFoot(c, items) + '</div></div>';
     });
     return h || emptyBlock('🧾', 'No expenses yet', 'Add your first expense.', '');
   }
-  function businessTotal(catId) {
-    return S.items.reduce(function (a, i) {
-      return a + (i.active && i.categoryId === catId && i.direction === 'out' ? HF.convert(i.amount, i.frequency, i.customWeeks, S.settings.view) : 0);
+  function activeTotal(items) {
+    return items.reduce(function (a, i) {
+      return a + (i.active ? HF.convert(i.amount, i.frequency, i.customWeeks, S.settings.view) : 0);
     }, 0);
   }
   function catFoot(c, items) {
@@ -219,13 +225,14 @@
     if (hasBiz) {
       var p = 0, b = 0;
       items.forEach(function (i) {
-        if (itemNotCountedReason(i)) return;
+        var r = HF.excludedReason(S, i);
+        if (r && r !== 'Business') return;
         var v = HF.convert(i.amount, i.frequency, i.customWeeks, view);
         if (i.scope === 'business') b += v; else p += v;
       });
-      bits.push('<span>Personal <b class="num">' + money(p) + '</b></span><span>Business / trust <b class="num">' + money(b) + '</b></span>');
+      bits.push('<span>Personal <b class="num">' + money(p) + '</b></span><span>Business / trust <b class="num">' + money(b) + '</b>' + (S.settings.includeBusiness ? '' : ' (excluded)') + '</span>');
     }
-    if (items.some(function (i) { return i.source === 'statement_avg'; })) bits.push('<span>Statement average Jan–Sep 2026 · bank only</span>');
+    if (items.some(function (i) { return i.source === 'statement_avg'; })) bits.push('<span>' + AVG_LABEL + '</span>');
     if (c.type === 'savings') bits.push('<span>Family savings — not consumption, counted in net worth</span>');
     return bits.length ? '<div class="cat-foot">' + bits.join('') + '</div>' : '';
   }
@@ -238,19 +245,19 @@
         '<div class="btn-row"><button class="btn primary" data-act="import">Import statement</button><button class="btn" data-act="add-tx">Add cash entry</button></div>');
     }
     var range = HF.periodRange(view, new Date(), ui.actualOffset);
-    var a = HF.actualSummary(S, range);
+    var a = HF.actualSummary(S, range, view);
     var h = '<div class="period"><button data-act="actual-shift" data-val="-1" aria-label="Previous">‹</button><b>' + HF.periodLabel(view, range) + '</b><button data-act="actual-shift" data-val="1" aria-label="Next">›</button></div>';
     h += '<div class="summary">' +
       '<div class="stat"><div class="lbl"><span class="dot" style="background:var(--good)"></span>Money in</div><div class="val num">' + money(a.income) + '</div><div class="sub">actual</div></div>' +
       '<button class="stat" data-act="overview"><div class="lbl"><span class="dot" style="background:var(--gold)"></span>Money out</div><div class="val num">' + money(a.expenses) + '</div><div class="sub">' + a.count + ' transactions</div></button>' +
       '<div class="stat hero"><div class="lbl">Money left</div><div class="val num ' + (a.available < 0 ? 'neg' : '') + '">' + money(a.available) + '</div>' +
-      '<div class="sub">' + (view === 'weekly' ? 'Monday → Sunday · ' : '') + 'excludes internal transfers, cash deposits & investments' + (a.oneoffs ? ' · includes ' + money(a.oneoffs) + ' one-offs' : '') + '</div>' + heroSplit(a.byType) + '</div></div>';
+      '<div class="sub">' + (view === 'weekly' ? 'Monday → Sunday · ' : '') + 'excludes internal transfers, cash deposits & investments' + (a.oneoffs ? ' · includes ' + money(a.oneoffs) + ' one-offs' : '') + '</div>' + heroSplit({ byType: a.byType }) + '</div></div>';
     h += '<p class="muted" style="font-size:12.5px;margin:4px 4px 0">' + MODE_HELP.actual + '</p>';
 
-    var txs = S.transactions.filter(function (t) { return t.date >= range.start && t.date <= range.end && !HF.txExcluded(S, t); });
+    var txs = S.transactions.filter(function (t) { return HF.txInRange(t, range, view) && !HF.txExcluded(S, t); });
     // Money in grouped by merchant
     var inc = {};
-    txs.forEach(function (t) { if (t.amount > 0) { var k = t.merchant || t.descriptionRaw; (inc[k] = inc[k] || { n: 0, v: 0, src: t.source }); inc[k].n++; inc[k].v += t.amount; } });
+    txs.forEach(function (t) { if (t.amount > 0) { var k = t.merchant || t.description_raw; (inc[k] = inc[k] || { n: 0, v: 0, src: t.source }); inc[k].n++; inc[k].v += t.amount; } });
     var incKeys = Object.keys(inc).sort(function (x, y) { return inc[y].v - inc[x].v; });
     h += '<section class="section"><div class="section-head"><h2>Money in</h2><span class="meta">' + incKeys.length + ' sources</span></div>';
     h += incKeys.length ? '<div class="list">' + incKeys.map(function (k) {
@@ -263,7 +270,7 @@
     if (!keys.length) h += '<div class="card pad muted">No spending in this period.</div>';
     keys.forEach(function (k) {
       var c = cat(k) || { name: 'Uncategorised', icon: '❔' };
-      var list = txs.filter(function (t) { return t.amount < 0 && (t.categoryId || 'uncategorised') === k; });
+      var list = txs.filter(function (t) { return t.amount < 0 && (t.category_id || 'uncategorised') === k; });
       var key = 'a_' + k, open = ui.open[key];
       h += '<div class="card cat ' + (open ? 'open' : '') + '"><button class="cat-head" data-act="toggle-cat" data-id="' + key + '"><div class="emoji">' + esc(c.icon) + '</div>' +
         '<div class="main"><div class="name">' + esc(c.name) + '</div><div class="sub">' + list.length + ' transactions</div></div><div class="amt num">' + money(a.byCat[k]) + '</div>' + I.chev + '</button>' +
@@ -277,21 +284,21 @@
     var s = S.settings, view = s.view, total, cats = [];
     if (s.mode === 'actual') {
       var range = HF.periodRange(view, new Date(), ui.actualOffset);
-      var a = HF.actualSummary(S, range);
+      var a = HF.actualSummary(S, range, view);
       total = a.expenses;
       Object.keys(a.byCat).forEach(function (k) {
         var lines = {};
         S.transactions.forEach(function (t) {
-          if (t.date < range.start || t.date > range.end || t.amount >= 0 || HF.txExcluded(S, t) || (t.categoryId || 'uncategorised') !== k) return;
-          var n = t.merchant || t.descriptionRaw; lines[n] = (lines[n] || 0) - t.amount;
+          if (!HF.txInRange(t, range, view) || t.amount >= 0 || HF.txExcluded(S, t) || (t.category_id || 'uncategorised') !== k) return;
+          var n = t.merchant || t.description_raw; lines[n] = (lines[n] || 0) - t.amount;
         });
         cats.push({ id: k, c: cat(k) || { name: 'Uncategorised', icon: '❔' }, v: a.byCat[k], lines: Object.keys(lines).map(function (n) { return [n, lines[n]]; }) });
       });
     } else {
-      var sum = HF.budgetSummary(S, view, s.mode);
+      var sum = HF.budgetSummary(S, view);
       total = sum.expenses;
       Object.keys(sum.byCat).forEach(function (k) {
-        var lines = S.items.filter(function (i) { return i.categoryId === k && i.direction === 'out' && HF.itemIncluded(S, i, s.mode); })
+        var lines = S.items.filter(function (i) { return i.categoryId === k && i.direction === 'out' && HF.itemIncluded(S, i); })
           .map(function (i) { return [i.name, HF.convert(i.amount, i.frequency, i.customWeeks, view)]; });
         cats.push({ id: k, c: cat(k), v: sum.byCat[k], lines: lines });
       });
@@ -299,7 +306,7 @@
     cats.sort(function (x, y) { return y.v - x.v; });
     var max = cats.length ? cats[0].v : 1;
     function body() {
-      var label = s.mode === 'actual' ? HF.periodLabel(view, HF.periodRange(view, new Date(), ui.actualOffset)) : 'per ' + VIEW_WORD[view] + ' · ' + s.mode;
+      var label = s.mode === 'actual' ? HF.periodLabel(view, HF.periodRange(view, new Date(), ui.actualOffset)) : 'per ' + VIEW_WORD[view] + ' · ' + (s.includeBusiness ? 'household + business' : 'household only');
       return '<div class="ov-total"><div class="lbl">Total expenses</div><div class="val num">' + money(total) + '</div><div class="muted" style="font-size:13px">' + esc(label) + '</div></div>' +
         '<h4 style="margin:0 2px 4px;font-size:15px">Category breakdown</h4>' +
         (cats.length ? cats.map(function (x) {
@@ -338,7 +345,7 @@
   function openItemForm(id, dir) {
     var it = id ? byId(S.items, id) : {
       id: null, direction: dir || 'out', name: '', categoryId: dir === 'in' ? 'c_income' : 'c_housing', amount: '', frequency: 'weekly', customWeeks: '',
-      source: 'manual', kind: 'fixed', active: true, scope: 'personal', review: false, provider: '', notes: ''
+      source: 'manual', kind: 'fixed', active: true, scope: 'personal', review: false, provider: '', notes: '', startDate: null, endDate: null
     };
     var isIn = it.direction === 'in';
     var f = '<form id="itemForm" autocomplete="off">' +
@@ -349,10 +356,13 @@
       '<label class="field"><span>Frequency</span><select name="frequency">' + freqOptions(it.frequency) + '</select></label></div>' +
       '<label class="field" id="xField"' + (it.frequency === 'everyX' ? '' : ' style="display:none"') + '><span>Every how many weeks?</span><input name="customWeeks" inputmode="decimal" value="' + esc(it.customWeeks || '') + '" placeholder="e.g. 3.5"></label>' +
       '<div class="note" id="convPreview" style="margin:0 0 12px"></div>' +
-      '<div class="grid2"><label class="field"><span>Source</span><select name="source">' + opts([['statement', 'Statement'], ['statement_avg', 'Statement average'], ['cash', 'Manual cash'], ['manual', 'Manual'], ['imported', 'Imported'], ['calculated', 'Calculated']], it.source) + '</select></label>' +
+      '<div class="grid2"><label class="field"><span>Source</span><select name="source">' + opts([['statement', 'Statement'], ['statement_avg', 'Statement average'], ['cash', 'Manual cash'], ['manual', 'Manual'], ['imported', 'Imported'], ['calculated', 'Calculated'], ['assumption', 'Assumption']], it.source) + '</select></label>' +
       '<label class="field"><span>Behaviour</span><select name="kind">' + opts([['fixed', 'Recurring (fixed)'], ['variable', 'Variable spending'], ['oneoff', 'One-off']], it.kind) + '</select></label></div>' +
       '<div class="grid2"><label class="field"><span>Belongs to</span><select name="scope">' + opts([['personal', 'Household / personal'], ['business', 'Business / trust']], it.scope) + '</select></label>' +
       '<label class="field"><span>Provider</span><input name="provider" value="' + esc(it.provider) + '" placeholder="Optional"></label></div>' +
+      '<div class="grid2"><label class="field"><span>Start date</span><input type="date" name="startDate" value="' + esc(it.startDate || '') + '"></label>' +
+      '<label class="field"><span>End date</span><input type="date" name="endDate" value="' + esc(it.endDate || '') + '"></label></div>' +
+      '<p class="muted" style="font-size:12px;margin:-4px 2px 12px">Optional. Outside these dates the item isn\'t counted — e.g. a repayment plan that finishes.</p>' +
       toggleField('active', 'Active', 'Inactive items are kept but not counted', it.active) +
       toggleField('review', 'Needs review', 'Flag to check against statements', it.review) +
       '<label class="field mt8"><span>Notes</span><textarea name="notes" placeholder="Optional">' + esc(it.notes) + '</textarea></label>' +
@@ -378,8 +388,10 @@
           customWeeks: form.frequency.value === 'everyX' ? num(form.customWeeks.value) || null : null,
           source: form.source.value, kind: form.frequency.value === 'oneoff' ? 'oneoff' : form.kind.value,
           scope: form.scope.value, provider: form.provider.value.trim(), active: form.active.checked,
-          review: form.review.checked, notes: form.notes.value.trim()
+          review: form.review.checked, notes: form.notes.value.trim(),
+          startDate: form.startDate.value || null, endDate: form.endDate.value || null
         };
+        if (d.startDate && d.endDate && d.endDate < d.startDate) { toast('End date is before start date'); return; }
         if (d.kind === 'oneoff' && d.frequency !== 'oneoff') d.frequency = 'oneoff';
         if (it.id) Object.assign(it, d); else S.items.push(Object.assign({ id: HF.uid('i') }, d));
         closeSheet(); commit(it.id ? 'Saved' : 'Added');
@@ -389,17 +401,17 @@
 
   // ===================== TRANSACTIONS =====================
   function txRow(t) {
-    var c = cat(t.categoryId);
-    var acct = byId(S.accounts, t.accountId);
+    var c = cat(t.category_id);
+    var acct = byId(S.accounts, t.account_id);
     var bits = [srcBadge(t.source === 'cash' ? 'cash' : t.source === 'manual' ? 'manual' : 'statement')];
-    if (t.internalTransfer) bits.push(badge('transfer', 'Transfer'));
-    if (t.cashDeposit) bits.push(badge('transfer', 'Cash deposit'));
-    if (t.oneOff) bits.push(badge('review', 'One-off'));
-    if (!t.categoryId) bits.push(badge('review', 'Uncategorised'));
+    if (t.internal_transfer) bits.push(badge('transfer', 'Transfer'));
+    if (t.cash_deposit) bits.push(badge('transfer', 'Cash deposit'));
+    if (t.one_off) bits.push(badge('review', 'One-off'));
+    if (!t.category_id) bits.push(badge('review', 'Uncategorised'));
     bits.push('<span>' + esc((c ? c.name : '') + (acct ? (c ? ' · ' : '') + acct.name : '')) + '</span>');
     var excl = HF.txExcluded(S, t);
     return '<div class="row ' + (excl ? 'excluded' : '') + '" data-act="edit-tx" data-id="' + t.id + '" style="cursor:pointer">' +
-      '<div class="emoji">' + esc(c ? c.icon : '❔') + '</div><div class="main"><div class="name">' + esc(t.merchant || t.descriptionRaw) + '</div><div class="sub">' + bits.join('') + '</div></div>' +
+      '<div class="emoji">' + esc(c ? c.icon : '❔') + '</div><div class="main"><div class="name">' + esc(t.merchant || t.description_raw) + '</div><div class="sub">' + bits.join('') + '</div></div>' +
       '<div class="amt num ' + (t.amount > 0 && !excl ? 'pos' : '') + '">' + (t.amount > 0 ? '+' : '') + money(t.amount, { dp: 2 }) + '<small>' + HF.fmtDate(t.date) + '</small></div></div>';
   }
 
@@ -407,7 +419,7 @@
     var h = '<header class="page-head"><div><h1>Transactions</h1><p>Statement-derived & manual cash</p></div></header>';
     h += '<div class="btn-row" style="margin-bottom:12px"><button class="btn primary" data-act="import">Import statement</button><button class="btn" data-act="add-tx">＋ Cash entry</button></div>';
     if (!S.transactions.length) {
-      return h + '<div class="card">' + emptyBlock('📄', 'No transactions yet', 'Import a CSV or PDF bank statement, or paste lines copied from internet banking. Merchant rules categorise everything automatically, and transfers between your own accounts are excluded.', '') + '</div>';
+      return h + '<div class="card">' + emptyBlock('📄', 'No transactions yet', 'Import a CSV bank statement, or paste lines copied from internet banking. Merchant rules categorise everything automatically, and transfers between your own accounts are excluded.', '') + '</div>';
     }
     h += '<div class="controls">' + seg('txView', [['weekly', 'Week'], ['monthly', 'Month'], ['yearly', 'Year'], ['all', 'All']], ui.txView, 'small') + '</div>';
     var range = ui.txView === 'all' ? { start: '0000', end: '9999' } : HF.periodRange(ui.txView, new Date(), ui.txOffset);
@@ -420,12 +432,12 @@
     var q = ui.txSearch.toLowerCase();
     var list = S.transactions.filter(function (t) {
       if (t.date < range.start || t.date > range.end) return false;
-      if (q && (t.merchant + ' ' + t.descriptionRaw).toLowerCase().indexOf(q) < 0) return false;
-      if (f === 'uncat') return !t.categoryId;
-      if (f === 'transfer') return t.internalTransfer || t.cashDeposit;
+      if (q && (t.merchant + ' ' + t.description_raw).toLowerCase().indexOf(q) < 0) return false;
+      if (f === 'uncat') return !t.category_id;
+      if (f === 'transfer') return t.internal_transfer || t.cash_deposit;
       if (f === 'cash') return t.source === 'cash';
-      if (f === 'oneoff') return t.oneOff;
-      if (f === 'sign') return t.signGuessed;
+      if (f === 'oneoff') return t.one_off;
+      if (f === 'sign') return t.sign_guessed;
       return true;
     }).sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
     var tin = 0, tout = 0;
@@ -524,24 +536,25 @@
 
   // ---------- Transaction form ----------
   function openTxForm(id) {
-    var t = id ? byId(S.transactions, id) : {
-      id: null, date: todayISO(), descriptionRaw: '', merchant: '', amount: '', accountId: 'a_cash', categoryId: 'c_food',
-      source: 'cash', internalTransfer: false, cashDeposit: false, oneOff: false, notes: ''
-    };
-    var isNew = !t.id, editableAmt = isNew || t.source !== 'imported';
-    var dir = t.amount > 0 ? 'in' : 'out';
+    var t = id ? byId(S.transactions, id) : HF.newTransaction({ account_id: 'a_cash', category_id: 'c_food', source: 'cash', amount: '' });
+    var isNew = !id, editableAmt = isNew || t.source !== 'imported';
+    var dir = t.direction || (t.amount > 0 ? 'in' : 'out');
     var f = '<form id="txForm" autocomplete="off">' +
-      (t.descriptionRaw && !isNew ? '<div class="note" style="margin:0 0 12px"><b>Statement text:</b> ' + esc(t.descriptionRaw) + '</div>' : '') +
-      '<label class="field"><span>' + (isNew ? 'Description' : 'Merchant name') + '</span><input name="merchant" required value="' + esc(t.merchant || t.descriptionRaw) + '" placeholder="e.g. House cleaner"></label>' +
+      (t.description_raw && !isNew ? '<div class="note" style="margin:0 0 12px"><b>Statement text:</b> ' + esc(t.description_raw) + (t.date_raw && t.date_raw !== t.date ? '<br><b>Statement date:</b> ' + esc(t.date_raw) : '') + '</div>' : '') +
+      '<label class="field"><span>' + (isNew ? 'Description' : 'Merchant name') + '</span><input name="merchant" required value="' + esc(t.merchant || t.description_raw) + '" placeholder="e.g. House cleaner"></label>' +
       '<div class="grid2"><label class="field"><span>Date</span><input type="date" name="date" value="' + esc(t.date) + '"' + (editableAmt ? '' : ' readonly') + '></label>' +
       '<label class="field"><span>Money</span><select name="dir"' + (editableAmt ? '' : ' disabled') + '>' + opts([['out', 'Out (spent)'], ['in', 'In (received)']], dir) + '</select></label></div>' +
       '<label class="field"><span>Amount</span><div class="money-input"><input name="amount" inputmode="decimal" value="' + (t.amount === '' ? '' : Math.abs(t.amount)) + '"' + (editableAmt ? '' : ' readonly') + '></div>' +
       (editableAmt ? '' : '<div class="hint">Imported amounts stay as the statement shows them.</div>') + '</label>' +
-      '<label class="field"><span>Category</span><select name="categoryId"><option value="">Uncategorised</option>' + catOptions(t.categoryId) + '</select></label>' +
-      (isNew ? '' : toggleField('internalTransfer', 'Internal transfer', 'Between your own accounts — not income or expense', t.internalTransfer) +
-        toggleField('cashDeposit', 'Cash deposit', 'Cash already counted manually — don\'t double count', t.cashDeposit)) +
-      toggleField('oneOff', 'One-off', 'Keep out of normal recurring spending', t.oneOff) +
-      (!isNew && t.source === 'imported' ? '<label class="field mt8"><span>Make a rule (optional)</span><input name="rulePattern" placeholder="Text to match, e.g. ' + esc(String(t.descriptionRaw).split(/\s+/).slice(0, 2).join(' ').toUpperCase()) + '">' +
+      '<div class="grid2"><label class="field"><span>Category</span><select name="category_id"><option value="">Uncategorised</option>' + catOptions(t.category_id) + '</select></label>' +
+      '<label class="field"><span>Subcategory</span><input name="subcategory" value="' + esc(t.subcategory || '') + '" placeholder="Optional"></label></div>' +
+      '<div class="grid2"><label class="field"><span>Budget week (Mon)</span><input type="date" name="budget_week" value="' + esc(t.budget_week || '') + '"><div class="hint">Move a split payment into the week it belongs to.</div></label>' +
+      '<label class="field"><span>Recurring group</span><input name="recurring_group" value="' + esc(t.recurring_group || '') + '" placeholder="e.g. Ariana Dance"></label></div>' +
+      (isNew ? '' : toggleField('internal_transfer', 'Internal transfer', 'Between your own accounts — not income or expense', t.internal_transfer) +
+        toggleField('cash_deposit', 'Cash deposit', 'Cash already counted manually — don\'t double count', t.cash_deposit)) +
+      toggleField('recurring', 'Recurring', 'A normal repeating payment', t.recurring) +
+      toggleField('one_off', 'One-off', 'Keep out of normal recurring spending', t.one_off) +
+      (!isNew && t.source === 'imported' ? '<label class="field mt8"><span>Make a rule (optional)</span><input name="rulePattern" placeholder="Text to match, e.g. ' + esc(String(t.description_raw).split(/\s+/).slice(0, 2).join(' ').toUpperCase()) + '">' +
         '<div class="hint">Future imports containing this text get this name & category.</div></label>' : '') +
       '<label class="field mt8"><span>Notes</span><textarea name="notes">' + esc(t.notes) + '</textarea></label>' +
       '<div class="btn-row mt12">' + (isNew ? '' : '<button type="button" class="btn danger" data-act="del-tx" data-id="' + t.id + '">Delete</button>') +
@@ -550,19 +563,24 @@
       var form = el.querySelector('#txForm');
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        var d = { merchant: form.merchant.value.trim(), categoryId: form.categoryId.value || null, oneOff: form.oneOff.checked, notes: form.notes.value.trim() };
+        var d = {
+          merchant: form.merchant.value.trim(), category_id: form.category_id.value || null, subcategory: form.subcategory.value.trim() || null,
+          recurring_group: form.recurring_group.value.trim() || null, recurring: form.recurring.checked, one_off: form.one_off.checked, notes: form.notes.value.trim()
+        };
         if (editableAmt) {
           var a = Math.abs(num(form.amount.value));
-          d.amount = form.dir.value === 'in' ? a : -a; d.date = form.date.value || todayISO();
+          d.amount = form.dir.value === 'in' ? a : -a; d.direction = form.dir.value;
+          if (form.date.value && form.date.value !== t.date) { d.date = form.date.value; d.date_raw = form.date.value; }
         }
-        if (!isNew) { d.internalTransfer = form.internalTransfer.checked; d.cashDeposit = form.cashDeposit.checked; d.userEdited = true; d.signGuessed = false; }
-        if (d.internalTransfer) d.categoryId = 'c_transfer';
-        if (isNew) {
-          S.transactions.push(Object.assign({ id: HF.uid('t'), descriptionRaw: d.merchant, accountId: 'a_cash', source: 'cash', internalTransfer: false, cashDeposit: false, recurring: false }, d));
-        } else Object.assign(t, d);
+        var date = d.date || t.date || todayISO();
+        d.budget_week = HF.toISO(HF.weekStart(HF.parseISO(form.budget_week.value || date)));
+        if (!isNew) { d.internal_transfer = form.internal_transfer.checked; d.cash_deposit = form.cash_deposit.checked; d.user_edited = true; d.sign_guessed = false; }
+        if (d.internal_transfer) d.category_id = 'c_transfer';
+        if (isNew) S.transactions.push(HF.newTransaction(Object.assign({ description_raw: d.merchant, account_id: 'a_cash', source: 'cash', date: date }, d)));
+        else Object.assign(t, d);
         var pat = form.rulePattern && form.rulePattern.value.trim();
         if (pat) {
-          S.rules.unshift({ id: HF.uid('r'), pattern: pat.toUpperCase(), merchant: d.merchant, categoryId: d.categoryId, flag: d.internalTransfer ? 'internal' : d.cashDeposit ? 'cashDeposit' : null });
+          S.rules.unshift({ id: HF.uid('r'), pattern: pat.toUpperCase(), merchant: d.merchant, categoryId: d.category_id, flag: d.internal_transfer ? 'internal' : d.cash_deposit ? 'cashDeposit' : null });
           var n = IM.reapplyRules(S);
           closeSheet(); commit('Rule added' + (n ? ' · ' + n + ' updated' : ''));
           return;
@@ -579,7 +597,7 @@
       '<label class="field"><span>Which account is this statement for?</span><select name="account">' + accts.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join('') +
       '<option value="__new">＋ New account…</option></select></label>' +
       '<label class="field" id="newAcct" style="display:none"><span>New account name</span><input name="newAccount" placeholder="e.g. CommBank Everyday"></label>' +
-      '<div class="field"><span>Statement file (CSV or PDF)</span><input type="file" name="file" accept=".csv,.txt,.pdf,text/csv,application/pdf"></div>' +
+      '<div class="field"><span>Statement file (CSV)</span><input type="file" name="file" accept=".csv,.txt,text/csv"><div class="hint">Export CSV from internet banking. PDF statements aren\'t supported — paste the lines instead.</div></div>' +
       '<label class="field"><span>…or paste transactions</span><textarea name="paste" placeholder="12/03/2026  WOOLWORTHS 1234 WOLLONGONG  -45.20&#10;13/03/2026  CENTRELINK FTB  956.40"></textarea>' +
       '<div class="hint">One per line: date, description, amount. Copy straight from internet banking.</div></label>' +
       '<label class="field"><span>Year for dates without one</span><input name="year" inputmode="numeric" value="' + new Date().getFullYear() + '"></label>' +
@@ -602,7 +620,7 @@
         var res = el.querySelector('#impResult');
         res.innerHTML = '<p class="muted">Reading…</p>';
         var p;
-        if (file && /\.pdf$/i.test(file.name)) p = file.arrayBuffer().then(IM.pdfToText).then(function (txt) { return IM.parseText(txt, year); });
+        if (file && /\.pdf$/i.test(file.name)) { res.innerHTML = '<div class="note"><b>PDF isn\'t supported.</b> Use the CSV export, or copy the lines from the PDF and paste them.</div>'; return; }
         else if (file) p = file.text().then(function (txt) { var r = IM.parseCSV(txt); return r.length ? r : IM.parseText(txt, year); });
         else if (paste.trim()) p = Promise.resolve(/,/.test(paste.split('\n')[0]) && IM.parseCSV(paste).length ? IM.parseCSV(paste) : IM.parseText(paste, year));
         else { res.innerHTML = '<p class="muted">Choose a file or paste some lines first.</p>'; return; }
@@ -615,7 +633,12 @@
         var b = e.target.closest('[data-imp]');
         if (!b) return;
         var rows = ui.importRows, i = Number(b.dataset.i);
-        if (b.dataset.imp === 'flip') { rows[i].amount = -rows[i].amount; rows[i].signGuessed = false; if (!rows[i].userCat) { var c = IM.classify(S, { description: rows[i].descriptionRaw, amount: rows[i].amount, accountId: rows[i].accountId }); rows[i].categoryId = c.categoryId; } el.querySelector('#impResult').innerHTML = importPreview(); }
+        if (b.dataset.imp === 'flip') {
+          var r = rows[i];
+          r.amount = -r.amount; r.direction = r.amount > 0 ? 'in' : 'out'; r.sign_guessed = false;
+          Object.assign(r, IM.classify(S, { description: r.description_raw, amount: r.amount, account_id: r.account_id }));
+          el.querySelector('#impResult').innerHTML = importPreview();
+        }
         if (b.dataset.imp === 'skip') { rows[i].skip = !rows[i].skip; el.querySelector('#impResult').innerHTML = importPreview(); }
         if (b.dataset.imp === 'confirm') {
           var add = rows.filter(function (r) { return !r.skip && !r.duplicate; });
@@ -630,21 +653,21 @@
   }
   function importPreview() {
     var rows = ui.importRows;
-    if (!rows.length) return '<div class="note mt12"><b>No transactions found.</b> For PDFs, some banks lay statements out in a way that can\'t be read — try the CSV export from internet banking, or copy & paste the lines.</div>';
+    if (!rows.length) return '<div class="note mt12"><b>No transactions found.</b> Check the CSV has date, description and amount columns, or copy & paste the lines from internet banking.</div>';
     var dup = rows.filter(function (r) { return r.duplicate; }).length;
-    var tr = rows.filter(function (r) { return r.internalTransfer; }).length;
-    var unc = rows.filter(function (r) { return !r.categoryId; }).length;
-    var guess = rows.filter(function (r) { return r.signGuessed; }).length;
+    var tr = rows.filter(function (r) { return r.internal_transfer; }).length;
+    var unc = rows.filter(function (r) { return !r.category_id; }).length;
+    var guess = rows.filter(function (r) { return r.sign_guessed; }).length;
     var n = rows.filter(function (r) { return !r.skip && !r.duplicate; }).length;
     var h = '<div class="card pad mt12"><div class="kv"><span>Found</span><b>' + rows.length + '</b></div><div class="kv"><span>Already imported (skipped)</span><b>' + dup + '</b></div>' +
       '<div class="kv"><span>Internal transfers</span><b>' + tr + '</b></div><div class="kv"><span>Uncategorised</span><b>' + unc + '</b></div>' +
       (guess ? '<div class="kv"><span>In/out guessed from text</span><b>' + guess + '</b></div>' : '') + '</div>';
     if (guess) h += '<div class="note">Rows marked <b>±?</b> had no sign on the statement. Tap <b>±</b> to flip any that are wrong.</div>';
     h += '<div class="list mt12">' + rows.slice(0, 300).map(function (r, i) {
-      var c = cat(r.categoryId);
+      var c = cat(r.category_id);
       return '<div class="row" style="' + (r.skip || r.duplicate ? 'opacity:.45' : '') + '"><div class="main"><div class="name" style="font-size:14px">' + esc(r.merchant) + '</div>' +
-        '<div class="sub"><span>' + HF.fmtDate(r.date, true) + '</span>' + (c ? '<span>· ' + esc(c.name) + '</span>' : badge('review', 'Uncategorised')) + (r.internalTransfer ? badge('transfer', 'Transfer') : '') + (r.duplicate ? badge('off', 'Duplicate') : '') + '</div></div>' +
-        '<div class="amt num ' + (r.amount > 0 ? 'pos' : '') + '" style="font-size:14px">' + money(r.amount, { dp: 2 }) + (r.signGuessed ? '<small>±?</small>' : '') + '</div>' +
+        '<div class="sub"><span>' + HF.fmtDate(r.date, true) + '</span>' + (c ? '<span>· ' + esc(c.name) + '</span>' : badge('review', 'Uncategorised')) + (r.internal_transfer ? badge('transfer', 'Transfer') : '') + (r.duplicate ? badge('off', 'Duplicate') : '') + '</div></div>' +
+        '<div class="amt num ' + (r.amount > 0 ? 'pos' : '') + '" style="font-size:14px">' + money(r.amount, { dp: 2 }) + (r.sign_guessed ? '<small>±?</small>' : '') + '</div>' +
         '<div class="icon-btns"><button class="ibtn" data-imp="flip" data-i="' + i + '" aria-label="Flip in/out">±</button>' +
         (r.duplicate ? '' : '<button class="ibtn" data-imp="skip" data-i="' + i + '" aria-label="Skip">' + (r.skip ? '↺' : '✕') + '</button>') + '</div></div>';
     }).join('') + '</div>';
@@ -680,7 +703,7 @@
         '<div class="right"><div class="num" style="font-weight:700;font-size:20px">' + (bal == null ? '<span class="muted" style="font-size:14px">Balance not set</span>' : money(bal, { dp: 2 })) + '</div>' +
         (d.limit ? '<div class="muted" style="font-size:12px">of ' + money(d.limit) + ' limit</div>' : '') + '</div></div>' +
         (util != null ? '<div class="util ' + (util > 1 ? 'over' : '') + '"><span style="width:' + Math.min(100, util * 100).toFixed(1) + '%"></span></div>' + (util > 1 ? '<div style="color:var(--bad);font-size:12px;margin-top:4px;font-weight:600">Over limit by ' + money(bal - d.limit, { dp: 2 }) + '</div>' : '') : '') +
-        '<div class="debt-meta"><div><small>Rate</small><b>' + (d.rate != null && d.rate !== '' ? d.rate + '%' : '—') + '</b></div><div><small>Repayment</small><b class="num">' + (Number(d.payment) ? money(d.payment, { dp: 2 }) + '<span class="muted" style="font-weight:500;font-size:11px"> ' + HF.freqLabel(d) + '</span>' : 'Not set') + '</b></div><div><small>Payoff</small><b>' + payoff + '</b></div></div>' +
+        '<div class="debt-meta"><div><small>Rate</small><b>' + (d.rate != null && d.rate !== '' ? d.rate + '%' : '—') + '</b></div><div><small>Repayment</small><b class="num">' + (Number(d.payment) ? money(d.payment, { dp: 2 }) + '<span class="muted" style="font-weight:500;font-size:11px"> ' + HF.freqLabel(d) + '</span>' : 'Not set') + '</b></div><div><small>' + (d.endDate ? 'Ends' : 'Payoff (est.)') + '</small><b>' + (d.endDate ? HF.fmtDate(d.endDate, true) : payoff) + '</b></div></div>' +
         (d.notes ? '<div class="muted" style="font-size:12.5px;margin-top:10px">' + esc(d.notes) + '</div>' : '') +
         '<div style="display:flex;justify-content:flex-end;margin-top:10px">' + iconBtns('debt', d.id) + '</div></div>';
     });
@@ -689,7 +712,7 @@
     return h;
   }
   function openDebtForm(id) {
-    var d = id ? byId(S.debts, id) : { id: null, name: '', balance: '', limit: '', rate: '', payment: '', frequency: 'monthly', scope: 'personal', active: true, notes: '' };
+    var d = id ? byId(S.debts, id) : { id: null, name: '', balance: '', limit: '', rate: '', payment: '', frequency: 'monthly', scope: 'personal', endDate: null, active: true, notes: '' };
     var f = '<form id="debtForm" autocomplete="off"><label class="field"><span>Name</span><input name="name" required value="' + esc(d.name) + '"></label>' +
       '<div class="grid2"><label class="field"><span>Balance owing</span><div class="money-input"><input name="balance" inputmode="decimal" value="' + esc(d.balance == null ? '' : d.balance) + '" placeholder="Unknown"></div></label>' +
       '<label class="field"><span>Credit limit</span><div class="money-input"><input name="limit" inputmode="decimal" value="' + esc(d.limit == null ? '' : d.limit) + '" placeholder="Optional"></div></label></div>' +
@@ -697,6 +720,7 @@
       '<label class="field"><span>Belongs to</span><select name="scope">' + opts([['personal', 'Personal'], ['business', 'Business / trust']], d.scope) + '</select></label></div>' +
       '<div class="grid2"><label class="field"><span>Repayment</span><div class="money-input"><input name="payment" inputmode="decimal" value="' + esc(d.payment || '') + '" placeholder="Target"></div></label>' +
       '<label class="field"><span>Frequency</span><select name="frequency">' + opts([['weekly', 'Weekly'], ['fortnightly', 'Fortnightly'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly']], d.frequency) + '</select></label></div>' +
+      '<label class="field"><span>End date</span><input type="date" name="endDate" value="' + esc(d.endDate || '') + '"><div class="hint">When it\'s due to be paid off, if known. Otherwise payoff is estimated.</div></label>' +
       toggleField('active', 'Active', 'Turn off when paid off or closed', d.active !== false) +
       '<label class="field mt8"><span>Notes</span><textarea name="notes">' + esc(d.notes) + '</textarea></label>' +
       '<div class="btn-row mt12">' + (d.id ? '<button type="button" class="btn danger" data-act="del-debt" data-id="' + d.id + '">Delete</button>' : '') + '<button class="btn primary" type="submit">' + (d.id ? 'Save' : 'Add debt') + '</button></div></form>';
@@ -706,7 +730,7 @@
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         var v = { name: form.name.value.trim() || 'Debt', balance: optNum(form.balance.value), limit: optNum(form.limit.value), rate: optNum(form.rate.value),
-          payment: num(form.payment.value), frequency: form.frequency.value, scope: form.scope.value, active: form.active.checked, notes: form.notes.value.trim() };
+          payment: num(form.payment.value), frequency: form.frequency.value, scope: form.scope.value, endDate: form.endDate.value || null, active: form.active.checked, notes: form.notes.value.trim() };
         if (d.id) Object.assign(d, v); else S.debts.push(Object.assign({ id: HF.uid('d') }, v));
         closeSheet(); commit('Saved');
       });
@@ -768,7 +792,7 @@
     var s = S.settings;
     var h = '<header class="page-head"><div><h1>More</h1><p>Settings, categories, rules & data</p></div></header>';
     h += '<section class="section" style="margin-top:0"><div class="section-head"><h2>Totals</h2></div>' +
-      '<label class="toggle"><span class="t-text"><b>Include business software</b><small>Count Business Software in household burn</small></span><span class="switch"><input type="checkbox" data-act="setting" data-key="includeBusiness"' + (s.includeBusiness ? ' checked' : '') + '><i></i></span></label>' +
+      '<label class="toggle"><span class="t-text"><b>Include business / trust</b><small>Count JZD ATO, Revenue NSW JZD and business software in totals</small></span><span class="switch"><input type="checkbox" data-act="setting" data-key="includeBusiness"' + (s.includeBusiness ? ' checked' : '') + '><i></i></span></label>' +
       '<label class="toggle"><span class="t-text"><b>Include manual cash</b><small>Off = bank-derived totals only. On = bank + manual cash</small></span><span class="switch"><input type="checkbox" data-act="setting" data-key="includeCash"' + (s.includeCash ? ' checked' : '') + '><i></i></span></label></section>';
     h += '<section class="section"><div class="section-head"><h2>Appearance</h2></div>' + seg('theme', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], s.theme || 'auto', 'small') + '</section>';
     var cats = S.categories.length, rules = S.rules.length, accts = S.accounts.length;
@@ -800,7 +824,7 @@
     function body() {
       var list = sortedCats();
       return '<button class="btn primary block" data-act="add-cat">＋ New category</button><div class="list mt12">' + list.map(function (c, i) {
-        var n = S.items.filter(function (it) { return it.categoryId === c.id; }).length + S.transactions.filter(function (t) { return t.categoryId === c.id; }).length;
+        var n = S.items.filter(function (it) { return it.categoryId === c.id; }).length + S.transactions.filter(function (t) { return t.category_id === c.id; }).length;
         return '<div class="row"><div class="emoji">' + esc(c.icon || '•') + '</div><div class="main" data-act="edit-cat" data-id="' + c.id + '" style="cursor:pointer"><div class="name">' + esc(c.name) + '</div><div class="sub">' + esc(HF.TYPE_LABELS[c.type] || c.type) + ' · ' + n + ' uses</div></div>' +
           '<div class="icon-btns"><button class="ibtn" data-act="cat-move" data-id="' + c.id + '" data-val="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>' + I.up + '</button><button class="ibtn" data-act="cat-move" data-id="' + c.id + '" data-val="1" aria-label="Move down"' + (i === list.length - 1 ? ' disabled' : '') + '>' + I.down + '</button>' +
           '<button class="ibtn" data-act="edit-cat" data-id="' + c.id + '" aria-label="Edit">' + I.edit + '</button></div></div>';
@@ -829,7 +853,7 @@
         var to = form.moveTo.value;
         if (!confirm('Delete “' + c.name + '”? Its items, transactions and rules move to “' + cat(to).name + '”.')) return;
         S.items.forEach(function (i) { if (i.categoryId === c.id) i.categoryId = to; });
-        S.transactions.forEach(function (t) { if (t.categoryId === c.id) t.categoryId = to; });
+        S.transactions.forEach(function (t) { if (t.category_id === c.id) t.category_id = to; });
         S.rules.forEach(function (r) { if (r.categoryId === c.id) r.categoryId = to; });
         S.categories = S.categories.filter(function (x) { return x.id !== c.id; });
         persist(); render(); openCats(); toast('Deleted');
@@ -950,7 +974,7 @@
       var k = b.dataset.key, v = b.dataset.val;
       if (k in ui) { ui[k] = v; if (k === 'txView') ui.txOffset = 0; render(); return; }
       if (k === 'view') ui.actualOffset = 0;
-      S.settings[k] = v; commit();
+      S.settings[k] = v === 'true' ? true : v === 'false' ? false : v; commit();
     },
     jump: function () { var el = document.getElementById('earnings'); if (el) el.scrollIntoView({ behavior: 'smooth' }); },
     overview: openOverview,
@@ -1007,7 +1031,7 @@
     'edit-account': function (b) { openAccountForm(b.dataset.id); },
     'del-account': function (b) {
       var a = byId(S.accounts, b.dataset.id);
-      var used = S.transactions.some(function (t) { return t.accountId === a.id; });
+      var used = S.transactions.some(function (t) { return t.account_id === a.id; });
       if (used) { toast('Account has transactions — mark it not owned instead'); return; }
       if (!confirmDel('“' + a.name + '”')) return;
       S.accounts = S.accounts.filter(function (x) { return x.id !== a.id; }); persist(); render(); openAccounts(); toast('Deleted');
