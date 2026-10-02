@@ -39,6 +39,7 @@
     chev: '<path d="m9 6 6 6-6 6"/>',
     back: '<path d="m15 6-6 6 6 6"/>',
     down: '<path d="m6 9 6 6 6-6"/>',
+    grip: '<circle cx="9" cy="6" r=".9"/><circle cx="15" cy="6" r=".9"/><circle cx="9" cy="12" r=".9"/><circle cx="15" cy="12" r=".9"/><circle cx="9" cy="18" r=".9"/><circle cx="15" cy="18" r=".9"/>',
     up: '<path d="m6 15 6-6 6 6"/>',
     dots: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
     search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',

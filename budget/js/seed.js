@@ -262,7 +262,7 @@
         view: 'weekly',          // weekly | monthly | yearly
         mode: 'budget',          // budget | actual
         expView: 'categories',   // all | categories
-        includeBusiness: false,  // business / trust items (JZD ATO, Revenue NSW JZD, software) in totals
+        includeBusiness: true,   // everything counts as household (the business toggle was removed)
         includeCash: true,       // manual cash items in totals
         tab: 'budget',
         userName: 'Joe',

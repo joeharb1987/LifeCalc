@@ -45,9 +45,9 @@ Data is saved in this browser's local storage (`hf_state_v1`, schema version 3).
 
 Weekly Actual figures and history group by `budget_week`; monthly/yearly by `date`.
 
-**BudgetItem** – `name, categoryId, amount, frequency, customWeeks, source, kind (fixed|variable|oneoff), scope (personal|business), active, startDate, endDate, notes`.
-Items outside their start/end dates aren't counted. `scope: business` items are excluded unless "+ Business" is on.
+**BudgetItem** – `name, categoryId, amount, frequency, customWeeks, source, kind (fixed|variable|oneoff), scope (personal|business), active, startDate, endDate, order, notes`. `order` is the drag-and-drop position within its category.
+Items outside their start/end dates aren't counted. Everything counts as household; `scope` is kept on old data but no longer filters anything.
 
 **Debt** – `name, balance, limit, rate, payment, frequency, endDate, scope, active, notes`.
 
-**Net worth** = assets − every active debt in scope (household, or household + business). Debts without a balance are listed as not yet subtracted. `nwHistory` keeps one snapshot per day the value changes, for the chart.
+**Net worth** = assets − every active debt. Debts without a balance are listed as not yet subtracted. `nwHistory` keeps one snapshot per day the value changes, for the chart.
