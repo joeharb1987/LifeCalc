@@ -5,7 +5,7 @@ const { chromium } = pw;
 const URL = process.argv[2] || 'http://localhost:8765/index.html';
 // Key names map to data-act/data-val buttons on the pads.
 const K = { '÷': ['op', '÷'], '×': ['op', '×'], '−': ['op', '−'], '+': ['op', '+'], '^': ['op', '^'], '=': ['equals'], '.': ['decimal'], 'AC': ['clear'], 'C': ['clear'],
-  '±': ['sign'], '%': ['percent'], '⌫': ['back'], '(': ['paren'], 'π': ['const', 'pi'], 'e': ['const', 'e'], 'sin': ['fn', 'sin'], 'cos': ['fn', 'cos'], 'tan': ['fn', 'tan'],
+  '±': ['sign'], '%': ['percent'], '⌫': ['clear'], '(': ['paren'], 'π': ['const', 'pi'], 'e': ['const', 'e'], 'sin': ['fn', 'sin'], 'cos': ['fn', 'cos'], 'tan': ['fn', 'tan'],
   'ln': ['fn', 'ln'], 'log': ['fn', 'log'], '√': ['fn', 'sqrt'] };
 const cases = [
   // basic arithmetic
@@ -57,11 +57,11 @@ const cases = [
   ['thousands while typing', '1 2 3 4 5 6 7', '1,234,567'],
   ['thousands decimal', '1 2 3 4 . 5 6 7 8', '1,234.5678'],
   // clear
-  ['C clears entry', '5 + 3 C 4 =', '9'],
-  ['C then AC clears all', '5 + 3 C C 7 =', '7'],
-  ['C after op clears all', '5 + C C 2 =', '2'],
-  ['C after result', '2 + 3 = C', '0'],
-  ['C then AC', '1 2 + 3 C C', '0'],
+  ['delete key removes last digit', '5 + 3 ⌫ 4 =', '9'],
+  ['delete twice removes operator', '5 + 3 ⌫ ⌫ 7 =', '57'],
+  ['delete to empty then AC', '5 ⌫ AC', '0'],
+  ['key reads AC after result', '2 + 3 = AC', '0'],
+  ['delete then AC', '1 2 + 3 ⌫ ⌫ ⌫ ⌫ AC', '0'],
   ['neg exponent then op swap', '2 ^ − + 3 =', '5'],
   ['sign of big result keeps precision', '9 9 9 9 9 9 9 × 9 9 9 9 9 9 9 × 9 9 9 = ± ÷ 1 0 0 0 =', '−99,899,980,020,001'],
   ['repeat on big result keeps precision', '9 9 9 9 9 9 9 × 9 9 9 9 9 9 9 × 9 9 9 = ÷ 1 0 0 0 = =', '99,899,980,020'],
@@ -83,6 +83,9 @@ const cases = [
   ['sqrt', '√ 1 6 =', '4'],
   ['2√9', '2 √ 9 =', '6'],
   ['√ of result', '1 6 = √ =', '4'],
+  ['√ after result then new number', '1 6 = √ 8 1 =', '9'],
+  ['√ of big result keeps precision', '9 9 9 9 9 9 9 × 9 9 9 9 9 9 9 × 9 9 9 = √ =', '316,069,580.979'],
+  ['ln after result then decimal', '5 = ln . 5 =', '−0.69314718056'],
   ['√ negative', '√ − 4 =', 'Error'],
   ['log', 'log 1 0 0 0 =', '3'],
   ['ln e', 'ln e =', '1'],
@@ -102,7 +105,7 @@ const cases = [
   ['unary minus in paren', '( − 3 ( × 2 =', '−6'],
   ['backspace', '1 2 3 ⌫ =', '12'],
   ['backspace fn', 'sin ⌫ 5 =', '5'],
-  ['backspace result', '1 2 3 = ⌫', '12'],
+  ['delete key after result is AC', '1 2 3 = ⌫', '0'],
   ['backspace to empty', '7 ⌫', '0'],
 ];
 (async () => {

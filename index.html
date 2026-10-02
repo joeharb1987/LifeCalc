@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#F5F1E7">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,522 +13,181 @@
 <link rel="apple-touch-icon" href="./lifecalc-icon-180.png">
 <title>LifeCalc</title>
 <style>
-  :root{
-    --bg:#F5F1E7;
-    --panel:#1B2340;
-    --key:#FFFFFF;
-    --key-border:#E4DFD1;
-    --amber:#C9954B;
-    --text:#1B2340;
-    --text-dim:#928E80;
-    --text-on-navy:#F5F1E7;
-    --top-btn:#FFFFFF;
-    --fn-bg:#FFFFFF;
-    --op-bg:#1B2340;
-    --op-text:#C9954B;
-    --eq-bg:#C9954B;
-    --eq-text:#FFFFFF;
-    --shadow:rgba(27,35,64,.06);
-  }
-
-  body.dark{
-    --bg:#000000;
-    --panel:#000000;
-    --key:#333333;
-    --key-border:#4A4A4A;
-    --amber:#FF9500;
-    --text:#FFFFFF;
-    --text-dim:#A5A5A5;
-    --text-on-navy:#FFFFFF;
-    --top-btn:#1C1C1E;
-    --fn-bg:#A5A5A5;
-    --op-bg:#FF9500;
-    --op-text:#FFFFFF;
-    --eq-bg:#FF9500;
-    --eq-text:#FFFFFF;
-    --shadow:transparent;
-  }
-
-  *{
-    box-sizing:border-box;
-    -webkit-tap-highlight-color:transparent;
-    touch-action:manipulation;
-  }
-
-  html,body{
-    margin:0;
-    padding:0;
-    width:100%;
-    height:100%;
-    overflow:hidden;
-    background:var(--bg);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
-    overscroll-behavior:none;
-    user-select:none;
-    -webkit-user-select:none;
-  }
-
-  button,input,select{ font:inherit; }
-
-  .app{
-    width:100%;
-    max-width:480px;
-    height:100dvh;
-    margin:0 auto;
-    display:flex;
-    flex-direction:column;
-    padding:
-      calc(env(safe-area-inset-top) + 8px)
-      16px
-      calc(env(safe-area-inset-bottom) + 8px);
-    background:var(--bg);
-  }
-
-  .topbar{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    flex:0 0 auto;
-  }
-
-  .mode-toggle{
-    display:flex;
-    flex:1;
-    min-width:0;
-    background:var(--top-btn);
-    border:1px solid var(--key-border);
-    border-radius:999px;
-    padding:4px;
-  }
-
-  .mode-toggle button{
-    flex:1;
-    min-width:0;
-    border:0;
-    background:transparent;
-    color:var(--text-dim);
-    border-radius:999px;
-    padding:9px 6px;
-    font-size:13px;
-    font-weight:700;
-  }
-
-  .mode-toggle button.active{
-    background:var(--panel);
-    color:var(--text-on-navy);
-  }
-
-  body.dark .mode-toggle button.active{
-    background:#FFFFFF;
-    color:#000000;
-  }
-
-  .icon-btn,.history-btn,.theme-btn{
-    width:44px;
-    height:44px;
-    flex:0 0 44px;
-    border-radius:50%;
-    border:1px solid var(--key-border);
-    background:var(--top-btn);
-    color:var(--text-dim);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:19px;
-  }
-
-  .theme-btn{ font-size:18px; }
-
-  .display{
-    position:relative;
-    flex:1 1 auto;
-    min-height:220px;
-    display:flex;
-    flex-direction:column;
-    justify-content:flex-end;
-    padding:12px 6px 10px;
-    background:transparent;
-    border-radius:0;
-    margin:0;
-    overflow:hidden;
-  }
-
-  .expr{
-    min-height:28px;
-    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;
-    color:var(--text-dim);
-    text-align:right;
-    font-size:21px;
-    font-weight:400;
-    white-space:nowrap;
-    overflow-x:auto;
-    scrollbar-width:none;
-    letter-spacing:-.02em;
-  }
-  .expr::-webkit-scrollbar{display:none;}
-
-  .result{
-    margin-top:4px;
-    min-height:76px;
-    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;
-    color:var(--text);
-    text-align:right;
-    font-size:66px;
-    font-weight:300;
-    line-height:1;
-    letter-spacing:-.045em;
-    white-space:nowrap;
-    overflow-x:auto;
-    scrollbar-width:none;
-    user-select:text;
-    -webkit-user-select:text;
-  }
-  body.dark .result{ color:#fff; }
-  .result::-webkit-scrollbar{display:none;}
-  .result.small{font-size:48px;}
-  .result.tiny{font-size:35px;}
-
-  .history-panel{
-    position:absolute;
-    inset:6px 0 8px;
-    display:none;
-    flex-direction:column;
-    padding:18px 18px;
-    border-radius:28px;
-    background:var(--panel);
-    color:var(--text-on-navy);
-    z-index:10;
-  }
-  .history-panel.open{display:flex;}
-  .history-panel h3{
-    margin:0 0 10px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    font-size:18px;
-    color:#9AA1C4;
-  }
-  .history-panel .clear{color:#E0937E;}
-  .history-list{
-    overflow:auto;
-    display:flex;
-    flex-direction:column-reverse;
-    gap:4px;
-  }
-  .history-item{
-    padding:10px 0;
-    border-bottom:1px solid rgba(154,161,196,.18);
-    text-align:right;
-  }
-  .history-item .h-expr{font-size:16px;color:#9AA1C4;}
-  .history-item .h-res{font-size:28px;color:var(--text-on-navy);}
-  .history-empty{margin-top:50px;text-align:center;color:#9AA1C4;}
-
-  .toast{
-    position:absolute;
-    left:50%;
-    bottom:18px;
-    transform:translateX(-50%) translateY(8px);
-    background:rgba(0,0,0,.78);
-    color:#fff;
-    font-size:12px;
-    font-weight:700;
-    padding:8px 16px;
-    border-radius:999px;
-    opacity:0;
-    pointer-events:none;
-    transition:.18s ease;
-    z-index:30;
-  }
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-
-  .paste-overlay{
-    position:absolute;
-    top:calc(env(safe-area-inset-top) + 60px);
-    left:16px;
-    right:16px;
-    z-index:25;
-    display:none;
-  }
-  .paste-overlay.open{display:block;}
-  .paste-overlay input{
-    width:100%;
-    height:48px;
-    border:1px solid var(--key-border);
-    background:var(--top-btn);
-    color:var(--text);
-    border-radius:14px;
-    padding:0 14px;
-    font-size:17px;
-    box-shadow:0 8px 24px rgba(0,0,0,.14);
-  }
-
-  .pad{
-    flex:0 0 auto;
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:10px;
-  }
-
-  .pad.basic{
-    grid-template-rows:repeat(5,minmax(66px,1fr));
-    height:min(50vh,500px);
-    margin-top:auto;
-  }
-
-  button.key{
-    border:1px solid var(--key-border);
-    border-radius:26px;
-    background:var(--key);
-    color:var(--text);
-    font-size:34px;
-    font-weight:400;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    min-width:0;
-    box-shadow:0 1px 0 var(--shadow);
-    transition:transform .04s ease,filter .06s ease;
-  }
-
-  button.key:active{
-    transform:scale(.95);
-    filter:brightness(.94);
-  }
-
-  .k-fn{
-    background:var(--fn-bg)!important;
-    color:var(--text)!important;
-    font-size:28px!important;
-  }
-
-  body.dark .k-fn{
-    color:#000!important;
-    border-color:#A5A5A5!important;
-  }
-
-  .k-op{
-    background:var(--op-bg)!important;
-    color:var(--op-text)!important;
-    border-color:var(--op-bg)!important;
-    font-size:36px!important;
-    font-weight:400!important;
-  }
-
-  .k-eq{
-    background:var(--eq-bg)!important;
-    color:var(--eq-text)!important;
-    border-color:var(--eq-bg)!important;
-    font-size:36px!important;
-  }
-
-  .k-wide{
-    grid-column:span 2;
-    justify-content:flex-start!important;
-    padding-left:30px!important;
-  }
-
-  .pad.sci{
-    grid-template-rows:repeat(7,minmax(46px,1fr));
-    height:min(58vh,550px);
-    gap:8px;
-  }
-
-  .pad.sci button.key{
-    border-radius:20px;
-    font-size:24px;
-  }
-  .pad.sci .k-sci{font-size:15px;}
-
-  .convert-panel{
-    flex:1;
-    min-height:0;
-    display:flex;
-    flex-direction:column;
-    gap:12px;
-    padding-top:14px;
-  }
-
-  .cat-row{
-    display:flex;
-    gap:8px;
-    overflow-x:auto;
-    scrollbar-width:none;
-  }
-  .cat-row::-webkit-scrollbar{display:none;}
-
-  .cat-chip{
-    flex:0 0 auto;
-    border:1px solid var(--key-border);
-    background:var(--top-btn);
-    color:var(--text-dim);
-    border-radius:999px;
-    padding:9px 15px;
-    font-weight:700;
-  }
-  .cat-chip.active{
-    background:var(--panel);
-    color:var(--text-on-navy);
-  }
-  body.dark .cat-chip.active{
-    background:#fff;
-    color:#000;
-  }
-
-  .conv-card{
-    background:var(--top-btn);
-    border:1px solid var(--key-border);
-    border-radius:22px;
-    padding:15px 17px;
-  }
-  .conv-card label{
-    display:block;
-    margin-bottom:5px;
-    color:var(--text-dim);
-    font-size:12px;
-    font-weight:700;
-  }
-  .conv-card select{
-    width:100%;
-    border:0;
-    background:transparent;
-    color:var(--text);
-    font-size:16px;
-    font-weight:700;
-  }
-  .conv-value{
-    width:100%;
-    margin-top:10px;
-    border:0;
-    outline:0;
-    background:transparent;
-    color:var(--text);
-    font-size:36px;
-    font-weight:400;
-  }
-  .swap-row{display:flex;justify-content:center;margin:-2px 0;}
-  .swap-btn{
-    width:44px;
-    height:44px;
-    border:0;
-    border-radius:50%;
-    background:var(--amber);
-    color:white;
-    font-size:20px;
-  }
-  .conv-result{
-    margin-top:auto;
-    background:var(--panel);
-    border-radius:26px;
-    padding:18px;
-  }
-  body.dark .conv-result{background:#1C1C1E;}
-  .conv-result .r-unit{color:#9AA1C4;font-size:13px;font-weight:700;}
-  .conv-result .r-value{
-    margin-top:3px;
-    color:var(--text-on-navy);
-    font-size:42px;
-    font-weight:400;
-    word-break:break-all;
-  }
-
-  @media (max-height:740px){
-    .app{
-      padding-top:calc(env(safe-area-inset-top) + 6px);
-      padding-bottom:calc(env(safe-area-inset-bottom) + 8px);
-    }
-    .icon-btn,.history-btn,.theme-btn{width:40px;height:40px;flex-basis:40px;}
-    .mode-toggle button{padding:7px 5px;}
-    .display{min-height:165px;padding-bottom:8px;}
-    .expr{font-size:21px;}
-    .result{font-size:56px;min-height:60px;}
-    .result.small{font-size:45px;}
-    .result.tiny{font-size:35px;}
-    .pad.basic{height:min(51vh,440px);gap:8px;}
-    button.key{border-radius:24px;font-size:29px;}
-    .k-fn{font-size:24px!important;}
-    .k-op,.k-eq{font-size:32px!important;}
-  }
-
-  @media (min-width:430px) and (min-height:820px){
-    .display{min-height:245px;}
-    .pad.basic{height:500px;}
-    button.key{border-radius:28px;}
-    .result{font-size:74px;}
-  }
-
-  @media (min-height:900px){
-    .display{min-height:290px;}
-    .pad.basic{height:500px;}
-  }
-
-
-  button.key.operator-active{
-    background:var(--text-on-navy)!important;
-    color:var(--panel)!important;
-  }
-  body.dark button.key.operator-active{
-    background:#FFFFFF!important;
-    color:#FF9500!important;
-  }
-
-
-.key sup{font-size:.55em;line-height:0;position:relative;top:-.55em;margin-left:1px;vertical-align:baseline;}
-/* V6.2 performance polish */
-button.key:active{
-  transform:scale(.96);
+/* LifeCalc calculator — modelled on the iPhone (iOS 18) Calculator.
+   Key size is set from JS (--key, --gap) so the keypad always fits above the tab bar. */
+:root{
+  --bg:#F2F2F7;
+  --text:#000000;
+  --text-dim:#8A8A8E;
+  --digit:#FFFFFF;
+  --digit-text:#000000;
+  --fn:#D4D4D2;
+  --fn-text:#000000;
+  --sci:#E5E5EA;
+  --sci-text:#000000;
+  --op:#FF9F0A;
+  --op-text:#FFFFFF;
+  --op-active-bg:#FFFFFF;
+  --op-active-text:#FF9F0A;
+  --digit-press:#D9D9DE;
+  --fn-press:#B8B8BC;
+  --sci-press:#C7C7CC;
+  --op-press:#FFC57A;
+  --sheet:#FFFFFF;
+  --line:rgba(60,60,67,.18);
+  --key-border:rgba(60,60,67,.18);
+  --top-btn:#FFFFFF;
+  --amber:#FF9F0A;
+  --shadow:0 1px 1px rgba(0,0,0,.06);
+  --key:76px;
+  --gap:14px;
 }
-.result,.expr{
-  contain:layout paint;
+body.dark{
+  --bg:#000000;
+  --text:#FFFFFF;
+  --text-dim:#8E8E93;
+  --digit:#333335;
+  --digit-text:#FFFFFF;
+  --fn:#5C5C5F;
+  --fn-text:#FFFFFF;
+  --sci:#1F1F21;
+  --sci-text:#FFFFFF;
+  --op:#FF9F0A;
+  --op-text:#FFFFFF;
+  --op-active-bg:#FFFFFF;
+  --op-active-text:#FF9F0A;
+  --digit-press:#737375;
+  --fn-press:#9A9A9D;
+  --sci-press:#4A4A4D;
+  --op-press:#FCC78D;
+  --sheet:#1C1C1E;
+  --line:rgba(84,84,88,.6);
+  --key-border:rgba(84,84,88,.45);
+  --top-btn:#121212;
+  --shadow:none;
 }
 
-/* Fit everything above the bottom bar on any screen: the display gives up space first,
-   then the keys shrink (never below a comfortable tap size). */
-.display{flex:1 1 auto;min-height:104px;}
-.pad.basic{grid-template-rows:repeat(5,minmax(46px,1fr));height:min(50dvh,500px);}
-.pad.sci{grid-template-rows:repeat(7,minmax(36px,1fr));height:min(56dvh,550px);}
-@media (max-height:620px){
-  .pad.basic{height:46dvh;gap:7px;}
-  .pad.sci{height:54dvh;gap:6px;}
-  .result{font-size:46px;min-height:50px;}
-  .result.small{font-size:38px;}
-  .result.tiny{font-size:30px;}
-  .expr{font-size:18px;min-height:22px;}
-  .pad.sci button.key{font-size:20px;border-radius:16px;}
-}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Arial,sans-serif;
+  overscroll-behavior:none;user-select:none;-webkit-user-select:none;}
+button,input,select{font:inherit;color:inherit;}
+button{cursor:pointer;}
 
-/* Shared LifeCalc bottom bar (same items as the Budget pages) */
 .app{
-  padding-bottom:calc(env(safe-area-inset-bottom) + 72px);
+  position:relative;width:100%;max-width:480px;height:100dvh;margin:0 auto;display:flex;flex-direction:column;
+  padding:calc(env(safe-area-inset-top) + 6px) 16px calc(env(safe-area-inset-bottom) + 74px);
 }
-.lc-tabbar{
-  position:fixed;left:0;right:0;bottom:0;z-index:40;
-  background:var(--top-btn);
-  border-top:1px solid var(--key-border);
-  padding-bottom:env(safe-area-inset-bottom);
-}
-.lc-tabbar-inner{
-  max-width:480px;margin:0 auto;height:64px;
-  display:grid;grid-template-columns:repeat(5,1fr);
-}
-.lc-tabbar a{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
-  color:var(--text-dim);text-decoration:none;font-size:11px;font-weight:600;
-}
+
+/* ---------- Top bar ---------- */
+.topbar{display:flex;align-items:center;justify-content:space-between;min-height:44px;flex:0 0 auto;}
+.icon-btn{width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:var(--op);display:grid;place-items:center;padding:0;}
+.icon-btn svg{width:24px;height:24px;}
+.topbar-title{font-size:17px;font-weight:600;}
+.done-btn{border:0;background:transparent;color:var(--op);font-size:17px;font-weight:600;padding:10px 4px;}
+.done-btn[hidden]{display:none;}
+
+/* ---------- Display ---------- */
+.display{position:relative;flex:1 1 auto;min-height:64px;display:flex;flex-direction:column;justify-content:flex-end;
+  padding:0 calc((100% - (4 * var(--key) + 3 * var(--gap))) / 2 + 6px) 10px;overflow:hidden;}
+.expr{min-height:30px;color:var(--text-dim);text-align:right;font-size:28px;font-weight:400;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;direction:ltr;letter-spacing:-.01em;}
+.result{color:var(--text);text-align:right;font-size:88px;font-weight:300;line-height:1.05;letter-spacing:-.035em;white-space:nowrap;
+  overflow:hidden;user-select:text;-webkit-user-select:text;font-variant-numeric:tabular-nums;}
+
+/* ---------- Keypad ---------- */
+.pad{display:grid;justify-content:center;flex:0 0 auto;}
+.pad.basic{grid-template-columns:repeat(4,var(--key));grid-auto-rows:var(--key);gap:var(--gap);padding-top:var(--gap);}
+.pad.sci{grid-template-columns:repeat(5,1fr);grid-auto-rows:var(--sci-row,40px);column-gap:calc(var(--gap) * .7);row-gap:calc(var(--gap) * .7);
+  width:calc(4 * var(--key) + 3 * var(--gap));margin:0 auto;}
+.pad[hidden]{display:none;}
+
+button.key{border:0;border-radius:999px;display:flex;align-items:center;justify-content:center;padding:0;
+  background:var(--digit);color:var(--digit-text);box-shadow:var(--shadow);
+  font-size:calc(var(--key) * .42);font-weight:400;line-height:1;transition:filter .25s ease, background-color .2s ease, color .2s ease;}
+button.key:active,button.key.pressed{background:var(--digit-press);transition:none;}
+.k-fn:active,.k-fn.pressed{background:var(--fn-press)!important;}
+.k-op:active,.k-op.pressed,.k-eq:active,.k-eq.pressed{background:var(--op-press)!important;}
+.k-sci:active,.k-sci.pressed{background:var(--sci-press)!important;}
+.k-fn{background:var(--fn)!important;color:var(--fn-text)!important;font-size:calc(var(--key) * .36)!important;}
+.k-op,.k-eq{background:var(--op)!important;color:var(--op-text)!important;font-size:calc(var(--key) * .48)!important;font-weight:500!important;}
+button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:var(--op-active-text)!important;}
+.k-sci{background:var(--sci)!important;color:var(--sci-text)!important;font-size:calc(var(--key) * .26)!important;}
+.k-sci.k-sci-op{color:var(--op)!important;}
+.key svg{width:42%;height:42%;}
+.k-fn svg{width:44%;height:44%;}
+.key sup{font-size:.6em;line-height:0;position:relative;top:-.5em;margin-left:1px;vertical-align:baseline;}
+
+/* ---------- Mode menu (bottom-left calculator key) ---------- */
+.mode-menu{position:absolute;z-index:30;min-width:220px;background:var(--sheet);border-radius:14px;overflow:hidden;
+  box-shadow:0 12px 40px rgba(0,0,0,.35);border:1px solid var(--line);transform-origin:bottom left;animation:menuIn .16s ease-out;}
+.mode-menu[hidden]{display:none;}
+@keyframes menuIn{from{opacity:0;transform:scale(.92);}to{opacity:1;transform:none;}}
+.mode-menu button{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;color:var(--text);
+  padding:13px 16px;font-size:17px;text-align:left;border-top:1px solid var(--line);}
+.mode-menu button:first-child{border-top:0;}
+.mode-menu button .tick{width:18px;color:var(--op);font-weight:700;visibility:hidden;}
+.mode-menu button.active .tick{visibility:visible;}
+.mode-menu .sep{height:8px;background:var(--line);opacity:.5;}
+
+/* ---------- History ---------- */
+.history-panel{position:absolute;inset:0 0 6px;display:none;flex-direction:column;padding:14px 16px;border-radius:20px;
+  background:var(--sheet);color:var(--text);z-index:10;border:1px solid var(--line);}
+.history-panel.open{display:flex;}
+.history-panel h3{margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;font-size:17px;font-weight:600;}
+.history-panel .clear{color:var(--op);font-weight:500;cursor:pointer;}
+.history-list{overflow:auto;display:flex;flex-direction:column-reverse;gap:2px;}
+.history-item{padding:10px 0;border-bottom:1px solid var(--line);text-align:right;cursor:pointer;}
+.history-item .h-expr{font-size:16px;color:var(--text-dim);}
+.history-item .h-res{font-size:28px;font-weight:300;}
+.history-empty{margin-top:40px;text-align:center;color:var(--text-dim);}
+
+.toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%) translateY(8px);background:rgba(120,120,128,.9);color:#fff;
+  font-size:13px;font-weight:600;padding:7px 14px;border-radius:999px;opacity:0;pointer-events:none;transition:.18s ease;z-index:30;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+.paste-overlay{position:absolute;top:calc(env(safe-area-inset-top) + 56px);left:16px;right:16px;z-index:25;display:none;}
+.paste-overlay.open{display:block;}
+.paste-overlay input{width:100%;height:48px;border:1px solid var(--line);background:var(--sheet);color:var(--text);border-radius:12px;
+  padding:0 14px;font-size:17px;outline:none;}
+
+/* ---------- Converter ---------- */
+.convert-panel{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px;padding-top:8px;overflow:auto;}
+.convert-panel[hidden]{display:none;}
+.cat-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;}
+.cat-row::-webkit-scrollbar{display:none;}
+.cat-chip{flex:0 0 auto;border:0;background:var(--digit);color:var(--digit-text);border-radius:999px;padding:9px 16px;font-size:15px;font-weight:500;box-shadow:var(--shadow);}
+.cat-chip.active{background:var(--op);color:#fff;}
+.conv-card{background:var(--sheet);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;}
+.conv-card label{font-size:13px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.conv-card select{border:0;background:transparent;color:var(--text);font-size:19px;font-weight:500;padding:4px 0;outline:none;-webkit-appearance:none;appearance:none;}
+.conv-value{border:0;background:transparent;color:var(--text);font-size:44px;font-weight:300;padding:0;outline:none;width:100%;
+  user-select:text;-webkit-user-select:text;}
+.swap-row{display:flex;justify-content:center;margin:-4px 0;}
+.swap-btn{width:46px;height:46px;border-radius:50%;border:0;background:var(--op);color:#fff;font-size:22px;}
+.conv-result{text-align:right;padding:8px 4px;}
+.conv-result .r-unit{color:var(--text-dim);font-size:15px;}
+.conv-result .r-value{font-size:56px;font-weight:300;letter-spacing:-.03em;white-space:nowrap;overflow:hidden;}
+
+/* ---------- Shared LifeCalc bottom bar (same items as the Budget pages) ---------- */
+.lc-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--top-btn);border-top:1px solid var(--key-border);
+  padding-bottom:env(safe-area-inset-bottom);}
+body.dark .lc-tabbar{background:rgba(18,18,18,.96);}
+.lc-tabbar-inner{max-width:480px;margin:0 auto;height:64px;display:grid;grid-template-columns:repeat(5,1fr);}
+.lc-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--text-dim);
+  text-decoration:none;font-size:11px;font-weight:600;}
 .lc-tabbar a.on{color:var(--amber);}
 .lc-tabbar svg{width:23px;height:23px;}
 </style>
 </head>
-<body>
-<div class="app">
+<body class="dark">
+<div class="app" id="calcApp">
   <div class="topbar">
-    <button class="history-btn" id="historyBtn" aria-label="History">&#8635;</button>
-    <div class="mode-toggle">
-      <button id="modeBasic" class="active">Basic</button>
-      <button id="modeSci">Scientific</button>
-      <button id="modeConvert">Convert</button>
-    </div>
-    <button class="theme-btn" id="themeBtn" aria-label="Toggle theme">&#9788;</button>
+    <button class="icon-btn" id="historyBtn" aria-label="History">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".6" fill="currentColor"/><circle cx="3.5" cy="12" r=".6" fill="currentColor"/><circle cx="3.5" cy="18" r=".6" fill="currentColor"/></svg>
+    </button>
+    <div class="topbar-title" id="modeTitle"></div>
+    <button class="done-btn" id="convertDone" hidden>Done</button>
   </div>
 
   <div class="paste-overlay" id="pasteOverlay">
@@ -546,70 +205,60 @@ button.key:active{
     </div>
   </div>
 
-  <div class="pad basic" id="padBasic">
-    <button class="key k-fn" data-act="clear">AC</button>
-    <button class="key k-fn" data-act="sign">&plusmn;</button>
-    <button class="key k-fn" data-act="percent">%</button>
-    <button class="key k-op" data-act="op" data-val="&divide;">&divide;</button>
-
-    <button class="key" data-act="digit" data-val="7">7</button>
-    <button class="key" data-act="digit" data-val="8">8</button>
-    <button class="key" data-act="digit" data-val="9">9</button>
-    <button class="key k-op" data-act="op" data-val="&times;">&times;</button>
-
-    <button class="key" data-act="digit" data-val="4">4</button>
-    <button class="key" data-act="digit" data-val="5">5</button>
-    <button class="key" data-act="digit" data-val="6">6</button>
-    <button class="key k-op" data-act="op" data-val="&minus;">&minus;</button>
-
-    <button class="key" data-act="digit" data-val="1">1</button>
-    <button class="key" data-act="digit" data-val="2">2</button>
-    <button class="key" data-act="digit" data-val="3">3</button>
-    <button class="key k-op" data-act="op" data-val="+">+</button>
-
-    <button class="key k-wide" data-act="digit" data-val="0">0</button>
-    <button class="key" data-act="decimal">.</button>
-    <button class="key k-eq" data-act="equals">=</button>
-  </div>
-
-  <div class="pad sci" id="padSci" style="display:none;">
+  <!-- Scientific keys sit above the standard keypad, as on iPhone -->
+  <div class="pad sci" id="padSci" hidden>
     <button class="key k-sci" data-act="fn" data-val="sin">sin</button>
     <button class="key k-sci" data-act="fn" data-val="cos">cos</button>
     <button class="key k-sci" data-act="fn" data-val="tan">tan</button>
-    <button class="key k-fn" data-act="clear">AC</button>
-
     <button class="key k-sci" data-act="fn" data-val="ln">ln</button>
-    <button class="key k-sci" data-act="fn" data-val="log">log</button>
-    <button class="key k-sci" data-act="fn" data-val="sqrt">&radic;</button>
-    <button class="key k-fn" data-act="back">&#9003;</button>
+    <button class="key k-sci" data-act="fn" data-val="log">log<sub style="font-size:.6em">10</sub></button>
 
+    <button class="key k-sci" data-act="fn" data-val="sqrt" aria-label="Square root">&radic;x</button>
+    <button class="key k-sci k-sci-op" data-act="op" data-val="^" aria-label="Power">x<sup>y</sup></button>
     <button class="key k-sci" data-act="const" data-val="pi">&pi;</button>
     <button class="key k-sci" data-act="const" data-val="e">e</button>
-    <button class="key k-op" data-act="op" data-val="^" aria-label="Power">x<sup>y</sup></button>
-    <button class="key k-op" data-act="op" data-val="&divide;">&divide;</button>
+    <button class="key k-sci" data-act="paren" data-val="(" aria-label="Brackets">( )</button>
+  </div>
+
+  <div class="pad basic" id="padBasic">
+    <button class="key k-fn" data-act="clear" aria-label="All clear">AC</button>
+    <button class="key k-fn" data-act="sign" aria-label="Plus minus"><span style="font-size:.82em;letter-spacing:-.04em">+/&minus;</span></button>
+    <button class="key k-fn" data-act="percent" aria-label="Percent">%</button>
+    <button class="key k-op" data-act="op" data-val="&divide;" aria-label="Divide">&divide;</button>
 
     <button class="key" data-act="digit" data-val="7">7</button>
     <button class="key" data-act="digit" data-val="8">8</button>
     <button class="key" data-act="digit" data-val="9">9</button>
-    <button class="key k-op" data-act="op" data-val="&times;">&times;</button>
+    <button class="key k-op" data-act="op" data-val="&times;" aria-label="Multiply">&times;</button>
 
     <button class="key" data-act="digit" data-val="4">4</button>
     <button class="key" data-act="digit" data-val="5">5</button>
     <button class="key" data-act="digit" data-val="6">6</button>
-    <button class="key k-op" data-act="op" data-val="&minus;">&minus;</button>
+    <button class="key k-op" data-act="op" data-val="&minus;" aria-label="Minus">&minus;</button>
 
     <button class="key" data-act="digit" data-val="1">1</button>
     <button class="key" data-act="digit" data-val="2">2</button>
     <button class="key" data-act="digit" data-val="3">3</button>
-    <button class="key k-op" data-act="op" data-val="+">+</button>
+    <button class="key k-op" data-act="op" data-val="+" aria-label="Plus">+</button>
 
-    <button class="key" data-act="paren" data-val="(" aria-label="Brackets">( )</button>
+    <button class="key" data-act="menu" id="modeMenuBtn" aria-label="Calculator mode" aria-haspopup="menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h8v3H8z"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/></svg>
+    </button>
     <button class="key" data-act="digit" data-val="0">0</button>
-    <button class="key" data-act="decimal">.</button>
-    <button class="key k-eq" data-act="equals">=</button>
+    <button class="key" data-act="decimal" aria-label="Decimal point">.</button>
+    <button class="key k-eq" data-act="equals" aria-label="Equals">=</button>
   </div>
 
-  <div class="convert-panel" id="padConvert" style="display:none;">
+  <div class="mode-menu" id="modeMenu" role="menu" hidden>
+    <button id="modeBasic" class="active" role="menuitemradio"><span class="tick">&#10003;</span>Basic</button>
+    <button id="modeSci" role="menuitemradio"><span class="tick">&#10003;</span>Scientific</button>
+    <button id="modeConvert" role="menuitemradio"><span class="tick">&#10003;</span>Convert</button>
+    <div class="sep"></div>
+    <button id="themeDark" role="menuitemradio"><span class="tick">&#10003;</span>Dark</button>
+    <button id="themeLight" role="menuitemradio"><span class="tick">&#10003;</span>Light</button>
+  </div>
+
+  <div class="convert-panel" id="padConvert" hidden>
     <div class="cat-row" id="catRow"></div>
 
     <div class="conv-card">
@@ -657,12 +306,12 @@ button.key:active{
   var display = '';          // expression being built, e.g. "12×(3+4)" — uses − × ÷ and sqrt( etc.
   var completedExpr = '';    // expression shown above the result after =
   var justEvaluated = false; // display holds a result
-  var entryCleared = false;  // C was just used, so the key now reads AC
   var history = [];
   var currentMode = 'basic';
   var repeatOp = null;
   var repeatOperand = null;
-  var carry = null;          // { text, value }: the full-precision number behind a displayed result
+  var carry = null;
+  var pendingFn = null;      // function pressed right after a result: typing a number replaces the result          // { text, value }: the full-precision number behind a displayed result
 
   var OPERATORS = '÷×−+^';
   function isOperator(c){ return !!c && c.length === 1 && OPERATORS.indexOf(c) >= 0; }
@@ -809,20 +458,42 @@ button.key:active{
   function setResultText(text){
     text = (text === null || text === undefined || text === '') ? '0' : String(text);
     resultEl.textContent = text;
-    resultEl.classList.toggle('small', text.length > 8);
-    resultEl.classList.toggle('tiny', text.length > 12);
+    fitResult();
+  }
+
+  // Shrink a number until it fits on one line (as iPhone does): one measurement, then scale.
+  function fitText(el, max){
+    el.style.fontSize = max + 'px';
+    var over = el.scrollWidth, room = el.clientWidth;
+    if (room && over > room + 1) el.style.fontSize = Math.max(24, Math.floor(max * room / over) - 1) + 'px';
+  }
+  function fitResult(){
+    var key = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--key')) || 76;
+    fitText(resultEl, Math.round(Math.min(96, key * 1.12)));
   }
 
   function updateDisplay(){
     exprEl.textContent = justEvaluated && completedExpr ? prettify(completedExpr) + ' =' : ' ';
     setResultText(prettify(display || '0'));
     updateClearLabel();
+    // The operator just pressed stays lit until the next number, like iPhone.
+    var pending = !justEvaluated && isOperator(lastChar()) ? lastChar() : '';
+    document.querySelectorAll('.key[data-act="op"]').forEach(function(k){
+      k.classList.toggle('operator-active', !!pending && k.getAttribute('data-val') === pending);
+    });
   }
 
-  function clearLabel(){ return (!display || justEvaluated || entryCleared) ? 'AC' : 'C'; }
+  // Top-left key: delete while there is something to delete, AC otherwise (iOS 18).
+  var DELETE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 5H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9.2a2 2 0 0 1-1.5-.7L2.5 12l5.2-6.3A2 2 0 0 1 9.2 5Z"/><path d="m11.5 9.5 5 5M16.5 9.5l-5 5"/></svg>';
+  function clearLabel(){ return (!display || justEvaluated) ? 'AC' : 'DEL'; }
   function updateClearLabel(){
     var label = clearLabel();
-    document.querySelectorAll('[data-act="clear"]').forEach(function(btn){ btn.textContent = label; });
+    document.querySelectorAll('[data-act="clear"]').forEach(function(btn){
+      if (btn.getAttribute('data-label') === label) return;
+      btn.setAttribute('data-label', label);
+      btn.innerHTML = label === 'AC' ? 'AC' : DELETE_ICON;
+      btn.setAttribute('aria-label', label === 'AC' ? 'All clear' : 'Delete');
+    });
   }
 
   function resetRepeat(){ repeatOp = null; repeatOperand = null; }
@@ -840,7 +511,6 @@ button.key:active{
       justEvaluated = false;
       resetRepeat();
     }
-    entryCleared = false;
   }
 
   function currentNumber(){
@@ -849,7 +519,13 @@ button.key:active{
   }
 
   // ---------- Keys ----------
+  // After "result, √", typing a number means √ of that new number, not of the result.
+  function takePendingFn(){
+    if (pendingFn) { display = pendingFn + '('; pendingFn = null; carry = null; }
+  }
+
   function handleDigit(d){
+    takePendingFn();
     beginInput(false);
     if (endsWithClosedValue()) display += '×';
     var seg = currentNumber();
@@ -862,6 +538,7 @@ button.key:active{
   }
 
   function handleDecimal(){
+    takePendingFn();
     beginInput(false);
     if (currentNumber().indexOf('.') >= 0 || /E/.test(currentNumber())) { updateDisplay(); return; }
     if (endsWithClosedValue()) display += '×';
@@ -870,6 +547,7 @@ button.key:active{
   }
 
   function handleOp(sym){
+    pendingFn = null;
     beginInput(true);
     var last = lastChar();
     if (!display || last === '(') {
@@ -917,6 +595,7 @@ button.key:active{
   }
   // The single ( ) key closes when a bracket is open and a value was just entered, otherwise opens.
   function handleParen(){
+    pendingFn = null;
     var opens = (display.match(/\(/g) || []).length, closes = (display.match(/\)/g) || []).length;
     if (!justEvaluated && opens > closes && endsWithValue()) closeParen();
     else openParen();
@@ -924,12 +603,15 @@ button.key:active{
 
   function handleFn(name){
     if (justEvaluated) {                            // apply to the result: 16 = √ → √(16
-      var res = display;
+      var res = display, keep = carry;
       beginInput(false);
+      carry = keep;
       display = name + '(' + res;
+      pendingFn = name;
       updateDisplay();
       return;
     }
+    pendingFn = null;
     beginInput(false);
     if (endsWithValue()) display += '×';
     display += name + '(';
@@ -937,6 +619,7 @@ button.key:active{
   }
 
   function handleConst(name){
+    takePendingFn();
     beginInput(false);
     if (endsWithValue()) display += '×';
     display += name === 'pi' ? 'π' : 'e';
@@ -960,6 +643,7 @@ button.key:active{
   }
 
   function handleSign(){
+    pendingFn = null;
     if (justEvaluated) {
       var v = parseDisplayNum(display);
       if (!isNaN(v)) {
@@ -969,7 +653,6 @@ button.key:active{
       }
       return;
     }
-    entryCleared = false;
     if (!display) { display = MINUS; updateDisplay(); return; }
     if (display === MINUS) { display = ''; updateDisplay(); return; }
     var start = trailingOperandStart();
@@ -1005,6 +688,7 @@ button.key:active{
   }
 
   function handlePercent(){
+    pendingFn = null;
     if (justEvaluated) {
       var v = parseDisplayNum(display);
       if (isNaN(v)) return;
@@ -1016,7 +700,6 @@ button.key:active{
       updateDisplay();
       return;
     }
-    entryCleared = false;
     if (!display || !endsWithValue()) return;
     var parts = findLastBinaryParts();
     if (!parts) {                                    // 50% → 0.5
@@ -1035,6 +718,7 @@ button.key:active{
   function operandText(v){ return v < 0 ? '(' + fmtNum(v) + ')' : fmtNum(v); }
 
   function handleBack(){
+    pendingFn = null;
     if (justEvaluated) {                             // edit the result
       carry = null;
       completedExpr = '';
@@ -1042,7 +726,6 @@ button.key:active{
       resetRepeat();
       if (/E|Error/.test(display)) display = '';
     }
-    entryCleared = false;
     var fn = display.match(FN_RE);
     display = fn ? display.slice(0, -fn[0].length) : display.slice(0, -1);
     if (display === MINUS + '0' ) display = '';
@@ -1050,26 +733,17 @@ button.key:active{
   }
 
   function handleClear(){
+    pendingFn = null;
     display = '';
     carry = null;
     completedExpr = '';
     justEvaluated = false;
-    entryCleared = false;
     resetRepeat();
     updateDisplay();
   }
 
-  // C: remove the number being typed; the key then reads AC.
-  function handleClearEntry(){
-    if (justEvaluated || !display) { handleClear(); return; }
-    var m = display.match(/(\(−)?(\d*\.?\d+\.?(?:E[+−]?\d*)?|\d+\.|[πe])\)?$/);
-    if (!m || isOperator(lastChar()) || lastChar() === '(') { handleClear(); return; }
-    display = display.slice(0, display.length - m[0].length);
-    entryCleared = true;
-    updateDisplay();
-  }
-
   function handleEquals(){
+    pendingFn = null;
     // Repeated equals: 5 + 2 = 7, = 9, = 11
     if (justEvaluated) {
       if (repeatOp === null) return;
@@ -1105,7 +779,6 @@ button.key:active{
     history.push({ expr: completedExpr, result: display });
     saveHistory(); renderHistory();
     justEvaluated = true;
-    entryCleared = false;
     updateDisplay();
   }
 
@@ -1115,7 +788,6 @@ button.key:active{
     completedExpr = expr;
     display = '';
     justEvaluated = true;
-    entryCleared = false;
     resetRepeat();
     updateDisplay();
     setResultText('Error');
@@ -1151,7 +823,6 @@ button.key:active{
     display = fmtNum(v);
     completedExpr = '';
     justEvaluated = true;
-    entryCleared = false;
     resetRepeat();
     updateDisplay();
     historyPanel.classList.remove('open');
@@ -1185,7 +856,8 @@ button.key:active{
         case 'sign': handleSign(); break;
         case 'percent': handlePercent(); break;
         case 'back': handleBack(); break;
-        case 'clear': if (clearLabel() === 'C') handleClearEntry(); else handleClear(); break;
+        case 'clear': if (clearLabel() === 'AC') handleClear(); else handleBack(); break;
+        case 'menu': toggleMenu(); break;
         case 'equals': handleEquals(); break;
       }
     });
@@ -1206,21 +878,69 @@ button.key:active{
     });
   })();
 
+  var padSciEl = padSci, modeMenu = document.getElementById('modeMenu'), modeMenuBtn = document.getElementById('modeMenuBtn');
+  var modeTitle = document.getElementById('modeTitle'), convertDone = document.getElementById('convertDone');
+
   function setMode(mode){
     currentMode = mode;
-    modeBasic.classList.toggle('active', mode==='basic');
-    modeSci.classList.toggle('active', mode==='sci');
-    modeConvert.classList.toggle('active', mode==='convert');
-
-    padBasic.style.display = mode==='basic' ? 'grid' : 'none';
-    padSci.style.display = mode==='sci' ? 'grid' : 'none';
-    padConvert.style.display = mode==='convert' ? 'flex' : 'none';
-    displayPanel.style.display = mode==='convert' ? 'none' : 'flex';
+    modeBasic.classList.toggle('active', mode === 'basic');
+    modeSci.classList.toggle('active', mode === 'sci');
+    modeConvert.classList.toggle('active', mode === 'convert');
+    var calc = mode !== 'convert';
+    padBasic.hidden = !calc;
+    padSciEl.hidden = mode !== 'sci';
+    padConvert.hidden = calc;
+    displayPanel.style.display = calc ? '' : 'none';
+    historyBtn.style.visibility = calc ? '' : 'hidden';
+    convertDone.hidden = calc;
+    modeTitle.textContent = calc ? '' : 'Convert';
+    try { localStorage.setItem('calc_mode_v5', mode); } catch (e) {}
+    closeMenu();
+    layout();
+    if (!calc) updateConversion();               // re-fit the result now the panel has a width
   }
+
+  // The calculator key (bottom left) opens the mode menu, as on iPhone.
+  function openMenu(){
+    modeMenu.hidden = false;
+    var app = document.getElementById('calcApp').getBoundingClientRect(), k = modeMenuBtn.getBoundingClientRect();
+    modeMenu.style.left = (k.left - app.left) + 'px';
+    modeMenu.style.top = Math.max(8, k.top - app.top - modeMenu.offsetHeight - 10) + 'px';
+  }
+  function closeMenu(){ modeMenu.hidden = true; }
+  function toggleMenu(){ if (modeMenu.hidden) openMenu(); else closeMenu(); }
+  document.addEventListener('click', function(e){
+    if (!modeMenu.hidden && !modeMenu.contains(e.target) && !modeMenuBtn.contains(e.target)) closeMenu();
+  });
 
   modeBasic.addEventListener('click', function(){ setMode('basic'); });
   modeSci.addEventListener('click', function(){ setMode('sci'); });
   modeConvert.addEventListener('click', function(){ setMode('convert'); });
+  convertDone.addEventListener('click', function(){ setMode('basic'); });
+
+  // Size the round keys so the keypad always fits between the display and the tab bar.
+  function layout(){
+    var root = document.documentElement, app = document.getElementById('calcApp');
+    var cs = getComputedStyle(app);
+    var width = app.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    var height = app.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - document.querySelector('.topbar').offsetHeight;
+    var gap = Math.round(Math.max(10, Math.min(16, width * 0.035)));
+    var sci = currentMode === 'sci';
+    var gaps = 5 + (sci ? 2 * 0.7 : 0);              // basic pad has a top gap
+    var tight = height < 470;                        // e.g. iPhone SE in Safari
+    var minDisplay = sci ? (tight ? 70 : 84) : 112;
+    var sciMin = tight ? 34 : 40;                    // scientific rows: 56% of a key, never below a comfortable tap target
+    var byWidth = (width - 3 * gap) / 4;
+    var key = Math.min(byWidth, (height - minDisplay - gaps * gap) / (5 + (sci ? 2 * 0.56 : 0)), 92);
+    if (sci && key * 0.56 < sciMin) key = Math.min(byWidth, (height - minDisplay - gaps * gap - 2 * sciMin) / 5, 92);
+    key = Math.floor(Math.max(36, key));
+    root.style.setProperty('--key', key + 'px');
+    root.style.setProperty('--sci-row', Math.round(Math.max(sciMin, key * 0.56)) + 'px');
+    root.style.setProperty('--gap', gap + 'px');
+    fitResult();
+  }
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', function(){ setTimeout(layout, 150); });
 
   document.addEventListener('keydown', function(e){
     if (currentMode === 'convert' || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1324,7 +1044,6 @@ button.key:active{
         display=fmtNum(num);
         completedExpr='';
         justEvaluated=false;
-        entryCleared=false;
         resetRepeat();
         updateDisplay();
       }
@@ -1493,6 +1212,7 @@ button.key:active{
 
     var result=convertVal(val,currentFromUnit,currentToUnit,currentCat);
     convResultValue.textContent=prettify(fmtNum(result));
+    fitText(convResultValue, 56);
     convResultUnit.textContent=unitAbbr(currentCat,currentToUnit);
   }
 
@@ -1500,29 +1220,21 @@ button.key:active{
     return convResultValue.textContent;
   });
 
-  // Theme
-  var themeBtn=document.getElementById('themeBtn');
-
+  // Theme — dark by default, like the iPhone Calculator.
+  var themeDark = document.getElementById('themeDark'), themeLight = document.getElementById('themeLight');
   function applyTheme(theme){
-    document.body.classList.toggle('dark',theme==='dark');
-    if(themeBtn)themeBtn.innerHTML=theme==='dark'?'&#9788;':'&#9790;';
-    try{localStorage.setItem('calc_theme_v4',theme);}catch(e){}
+    document.body.classList.toggle('dark', theme === 'dark');
+    themeDark.classList.toggle('active', theme === 'dark');
+    themeLight.classList.toggle('active', theme !== 'dark');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#000000' : '#F2F2F7');
+    try { localStorage.setItem('calc_theme_v5', theme); } catch (e) {}
   }
-
-  var savedTheme='light';
-  try{
-    savedTheme=localStorage.getItem('calc_theme_v4') ||
-               localStorage.getItem('calc_theme_v2') ||
-               'light';
-  }catch(e){}
-
+  var savedTheme = 'dark';
+  try { savedTheme = localStorage.getItem('calc_theme_v5') || 'dark'; } catch (e) {}
   applyTheme(savedTheme);
-
-  if(themeBtn){
-    themeBtn.addEventListener('click',function(){
-      applyTheme(document.body.classList.contains('dark')?'light':'dark');
-    });
-  }
+  themeDark.addEventListener('click', function(){ applyTheme('dark'); closeMenu(); });
+  themeLight.addEventListener('click', function(){ applyTheme('light'); closeMenu(); });
 
   // Pinch zoom is blocked; double-tap zoom is already off via touch-action: manipulation.
   document.addEventListener('gesturestart',function(e){e.preventDefault();},{passive:false});
@@ -1534,7 +1246,11 @@ button.key:active{
   populateSelects();
   updateConversion();
   loadHistory();
+  var savedMode = 'basic';
+  try { savedMode = localStorage.getItem('calc_mode_v5') || 'basic'; } catch (e) {}
+  setMode(/^(basic|sci|convert)$/.test(savedMode) ? savedMode : 'basic');
   updateDisplay();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
 })();
 </script>
 
@@ -1553,10 +1269,10 @@ if ("serviceWorker" in navigator) {
   // Fast taps on the keypad: press on touchend without the browser's click delay,
   // but only if the finger lifts on the same key (sliding off cancels, like iOS).
   document.querySelectorAll('button.key').forEach(function(btn){
-    btn.addEventListener('touchstart', function(){ btn.style.transform = 'scale(.96)'; }, { passive:true });
-    btn.addEventListener('touchcancel', function(){ btn.style.transform = ''; });
+    btn.addEventListener('touchstart', function(){ btn.classList.add('pressed'); }, { passive:true });
+    btn.addEventListener('touchcancel', function(){ btn.classList.remove('pressed'); });
     btn.addEventListener('touchend', function(e){
-      btn.style.transform = '';
+      btn.classList.remove('pressed');
       e.preventDefault();                       // stop the delayed synthetic click (no double press)
       var t = e.changedTouches[0];
       var under = t && document.elementFromPoint(t.clientX, t.clientY);
