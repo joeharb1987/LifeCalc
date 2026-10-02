@@ -1,6 +1,7 @@
-# Household Finance (Joe & Zhila)
+# LifeTrack (Joe & Zhila)
 
-Mobile-first household finance app: **money in → money out → money left**.
+Mobile-first household finance app: **money in → money out → left over**.
+Screens: Home, Transactions, Budget (+ category detail, expense overview), Debts, More (Net Worth, Reports, settings).
 Plain HTML/CSS/JS, no build step. Lives alongside the LifeCalc calculator at `/finance/`.
 
 - **Open:** `https://<your-github-pages-domain>/LifeCalc/finance/` — then Share → Add to Home Screen.
@@ -11,9 +12,10 @@ Plain HTML/CSS/JS, no build step. Lives alongside the LifeCalc calculator at `/f
 - `js/core.js` – frequency conversion, Monday–Sunday periods, budget/actual/net-worth maths, storage, migration
 - `js/seed.js` – starting figures from the Jan–Sep 2026 statement review
 - `js/importer.js` – CSV / pasted-text parsing, merchant rules, transfer detection, de-dupe (no PDF)
+- `js/icons.js` – line icon set (categories store an icon key)
 - `js/app.js` – UI
 
-Data is saved in this browser's local storage (`hf_state_v1`, schema version 2). Use More → Export backup.
+Data is saved in this browser's local storage (`hf_state_v1`, schema version 3). Use More → Export backup.
 
 ## Ledger tables
 
@@ -46,3 +48,5 @@ Weekly Actual figures and history group by `budget_week`; monthly/yearly by `dat
 Items outside their start/end dates aren't counted. `scope: business` items are excluded unless "+ Business" is on.
 
 **Debt** – `name, balance, limit, rate, payment, frequency, endDate, scope, active, notes`.
+
+**Net worth** = assets − every active debt in scope (household, or household + business). Debts without a balance are listed as not yet subtracted. `nwHistory` keeps one snapshot per day the value changes, for the chart.

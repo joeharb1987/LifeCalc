@@ -6,26 +6,26 @@
 
   function seed() {
     var categories = [
-      { id: 'c_income', name: 'Income', icon: '💵', type: 'income' },
-      { id: 'c_housing', name: 'Housing', icon: '🏠', type: 'living' },
-      { id: 'c_food', name: 'Food', icon: '🛒', type: 'living' },
-      { id: 'c_education', name: 'Education', icon: '🎓', type: 'living' },
-      { id: 'c_kids', name: 'Children Activities', icon: '🎹', type: 'living' },
-      { id: 'c_transport', name: 'Transport', icon: '🚗', type: 'living' },
-      { id: 'c_utilities', name: 'Utilities & Bills', icon: '💡', type: 'living' },
-      { id: 'c_insurance', name: 'Insurance', icon: '🛡️', type: 'living' },
-      { id: 'c_shopping', name: 'Shopping', icon: '🛍️', type: 'living' },
-      { id: 'c_health', name: 'Health', icon: '💊', type: 'living' },
-      { id: 'c_personal', name: 'Personal Care', icon: '✂️', type: 'living' },
-      { id: 'c_subs', name: 'Subscriptions', icon: '📺', type: 'living' },
-      { id: 'c_debt', name: 'Debt Repayments', icon: '💳', type: 'debt' },
-      { id: 'c_tax', name: 'Tax & Government', icon: '🏛️', type: 'tax' },
-      { id: 'c_savings', name: 'Family Savings', icon: '🐷', type: 'savings' },
-      { id: 'c_business', name: 'Business Software', icon: '💻', type: 'business' },
-      { id: 'c_oneoff', name: 'One-offs', icon: '📌', type: 'oneoff' },
-      { id: 'c_transfer', name: 'Internal Transfer', icon: '🔁', type: 'transfer' },
-      { id: 'c_invest', name: 'Cash → Investment', icon: '📈', type: 'investment' },
-      { id: 'c_liquidation', name: 'Asset Liquidation', icon: '💱', type: 'investment' }
+      { id: 'c_income', name: 'Income', icon: 'wallet', type: 'income' },
+      { id: 'c_housing', name: 'Housing', icon: 'home', type: 'living' },
+      { id: 'c_food', name: 'Food', icon: 'food', type: 'living' },
+      { id: 'c_education', name: 'Education', icon: 'education', type: 'living' },
+      { id: 'c_kids', name: 'Children Activities', icon: 'kids', type: 'living' },
+      { id: 'c_transport', name: 'Transport', icon: 'car', type: 'living' },
+      { id: 'c_utilities', name: 'Utilities & Bills', icon: 'bolt', type: 'living' },
+      { id: 'c_insurance', name: 'Insurance', icon: 'shield', type: 'living' },
+      { id: 'c_shopping', name: 'Shopping', icon: 'bag', type: 'living' },
+      { id: 'c_health', name: 'Health', icon: 'health', type: 'living' },
+      { id: 'c_personal', name: 'Personal Care', icon: 'scissors', type: 'living' },
+      { id: 'c_subs', name: 'Subscriptions', icon: 'tv', type: 'living' },
+      { id: 'c_debt', name: 'Debt Repayments', icon: 'card', type: 'debt' },
+      { id: 'c_tax', name: 'Tax & Government', icon: 'bank', type: 'tax' },
+      { id: 'c_savings', name: 'Family Savings', icon: 'piggy', type: 'savings' },
+      { id: 'c_business', name: 'Business Software', icon: 'laptop', type: 'business' },
+      { id: 'c_oneoff', name: 'One-offs', icon: 'pin', type: 'oneoff' },
+      { id: 'c_transfer', name: 'Internal Transfer', icon: 'transfer', type: 'transfer' },
+      { id: 'c_invest', name: 'Cash → Investment', icon: 'chart', type: 'investment' },
+      { id: 'c_liquidation', name: 'Asset Liquidation', icon: 'coins', type: 'investment' }
     ];
     categories.forEach(function (c, i) { c.order = i; });
 
@@ -257,15 +257,17 @@
     debts.forEach(function (d) { if (!('endDate' in d)) d.endDate = null; });
 
     return {
-      version: 2,
+      version: 3,
       settings: {
         view: 'weekly',          // weekly | monthly | yearly
         mode: 'budget',          // budget | actual
         expView: 'categories',   // all | categories
         includeBusiness: false,  // business / trust items (JZD ATO, Revenue NSW JZD, software) in totals
         includeCash: true,       // manual cash items in totals
-        nwScope: 'household',    // household | all
-        tab: 'budget'
+        tab: 'home',
+        userName: 'Joe',
+        householdName: 'Joe & Zhila',
+        theme: 'auto'
       },
       categories: categories,
       items: items,
@@ -273,7 +275,8 @@
       transactions: [],
       rules: rules,
       debts: debts,
-      assets: assets
+      assets: assets,
+      nwHistory: []             // [{ date, household, all }] — one snapshot per day values change
     };
   }
 

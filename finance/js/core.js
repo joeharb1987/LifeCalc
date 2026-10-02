@@ -138,9 +138,16 @@
   function migrate(state) {
     var seed = root.HF.seed();
     var from = state.version || 1;
-    ['categories', 'items', 'accounts', 'transactions', 'rules', 'debts', 'assets'].forEach(function (k) {
+    ['categories', 'items', 'accounts', 'transactions', 'rules', 'debts', 'assets', 'nwHistory'].forEach(function (k) {
       if (!Array.isArray(state[k])) state[k] = seed[k];
     });
+    if (from < 3) {
+      // V3 swapped emoji category icons for line-icon keys.
+      var seedIcons = {};
+      seed.categories.forEach(function (c) { seedIcons[c.id] = c.icon; });
+      state.categories.forEach(function (c) { c.icon = seedIcons[c.id] || 'tag'; });
+      if (state.settings) { delete state.settings.nwScope; if (state.settings.tab === 'budget') state.settings.tab = 'home'; }
+    }
     if (from < 2) {
       // V1 was never released: take the corrected seed figures, keep any transactions.
       state.items = seed.items;
@@ -354,19 +361,33 @@
   }
 
   // ---------- Net worth ----------
+  // scope 'household' = household assets − household debts; 'all' adds business / trust assets and debts.
+  // Every active debt in scope is subtracted; debts without a balance are listed so the gap is visible.
   function netWorth(state, scope) {
     var withBiz = scope === 'all';
-    var assets = 0, liabilities = 0;
+    var assets = 0, liabilities = 0, missing = [];
     state.assets.forEach(function (a) {
       if (a.scope === 'business' && !withBiz) return;
       assets += Number(a.value) || 0;
     });
     state.debts.forEach(function (d) {
-      if (d.scope === 'business' && !withBiz) return;
       if (d.active === false) return;
+      if (d.scope === 'business' && !withBiz) return;
+      if (d.balance == null || d.balance === '') { missing.push(d); return; }
       liabilities += Number(d.balance) || 0;
     });
-    return { assets: assets, liabilities: liabilities, net: assets - liabilities };
+    return { assets: assets, liabilities: liabilities, net: assets - liabilities, missing: missing };
+  }
+
+  // Keep one snapshot per day so the net-worth chart builds up as values are updated.
+  function recordNetWorth(state, date) {
+    date = date || todayISO();
+    var snap = { date: date, household: netWorth(state, 'household').net, all: netWorth(state, 'all').net };
+    var h = state.nwHistory || (state.nwHistory = []);
+    var last = h[h.length - 1];
+    if (last && last.date === date) h[h.length - 1] = snap;
+    else if (!last || last.household !== snap.household || last.all !== snap.all) h.push(snap);
+    return snap;
   }
 
   root.HF = Object.assign(root.HF || {}, {
@@ -379,6 +400,6 @@
     catById: catById, itemIncluded: itemIncluded, excludedReason: excludedReason, isBusiness: isBusiness, isOneOff: isOneOff,
     budgetSummary: budgetSummary, cashSpendingEntered: cashSpendingEntered, upcomingChanges: upcomingChanges,
     newTransaction: newTransaction, txExcluded: txExcluded, txInRange: txInRange, actualSummary: actualSummary, history: history,
-    payoffMonths: payoffMonths, netWorth: netWorth
+    payoffMonths: payoffMonths, netWorth: netWorth, recordNetWorth: recordNetWorth, todayISO: todayISO
   });
 })(typeof window !== 'undefined' ? window : globalThis);

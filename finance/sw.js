@@ -1,6 +1,6 @@
 // Network-first so updates pushed to GitHub Pages show up straight away; cache is the offline fallback.
-const CACHE = "household-v1";
-const SHELL = ["./", "./index.html", "./styles.css", "./manifest.json", "./js/core.js", "./js/seed.js", "./js/importer.js", "./js/app.js"];
+const CACHE = "lifetrack-v3";
+const SHELL = ["./", "./index.html", "./styles.css", "./manifest.json", "./js/core.js", "./js/icons.js", "./js/seed.js", "./js/importer.js", "./js/app.js"];
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();

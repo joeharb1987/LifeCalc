@@ -209,9 +209,40 @@ t('migrates V1 saves', () => {
   const v1 = HF.seed(); v1.version = 1; v1.settings.mode = 'normalised';
   v1.transactions = [{ id: 't1', date: '2026-09-29', descriptionRaw: 'X', merchant: 'X', amount: -5, accountId: 'a_joint', categoryId: 'c_food', internalTransfer: false, oneOff: false, source: 'imported' }];
   const m = HF.migrate(JSON.parse(JSON.stringify(v1)));
-  assert.strictEqual(m.version, 2); assert.strictEqual(m.settings.mode, 'budget');
+  assert.strictEqual(m.version, 3); assert.strictEqual(m.settings.mode, 'budget');
+  assert.strictEqual(m.categories.find(c => c.id === 'c_food').icon, 'food');
   assert.strictEqual(m.transactions[0].category_id, 'c_food'); assert.strictEqual(m.transactions[0].budget_week, '2026-09-28');
   assert.ok(!('categoryId' in m.transactions[0]));
+});
+
+t('net worth subtracts every debt in scope and lists missing balances', () => {
+  const S = HF.seed();
+  const debtsIn = scope => S.debts.filter(d => d.active !== false && (scope === 'all' || d.scope !== 'business'));
+  ['household', 'all'].forEach(scope => {
+    const nw = HF.netWorth(S, scope);
+    const withBal = debtsIn(scope).filter(d => d.balance != null);
+    close(nw.liabilities, withBal.reduce((a, d) => a + d.balance, 0), scope);
+    assert.deepStrictEqual(nw.missing.map(d => d.id).sort(), debtsIn(scope).filter(d => d.balance == null).map(d => d.id).sort());
+  });
+  assert.ok(HF.netWorth(S, 'household').missing.some(d => d.name === 'Tesla — Angle Finance'));
+  // Setting a balance moves it from missing into liabilities.
+  const before = HF.netWorth(S, 'household');
+  S.debts.find(d => d.id === 'd_tesla').balance = 30000;
+  const after = HF.netWorth(S, 'household');
+  close(before.net - after.net, 30000);
+  assert.strictEqual(after.missing.length, before.missing.length - 1);
+  // Closed debts drop out.
+  S.debts.find(d => d.id === 'd_tesla').active = false;
+  close(HF.netWorth(S, 'household').net, before.net);
+});
+
+t('net worth snapshots: one per day, only on change', () => {
+  const S = HF.seed();
+  HF.recordNetWorth(S, '2026-10-01'); HF.recordNetWorth(S, '2026-10-01'); HF.recordNetWorth(S, '2026-10-02');
+  assert.strictEqual(S.nwHistory.length, 1, 'unchanged value not re-recorded');
+  S.assets[0].value = 5000; HF.recordNetWorth(S, '2026-10-02');
+  assert.strictEqual(S.nwHistory.length, 2);
+  close(S.nwHistory[1].household - S.nwHistory[0].household, 5000);
 });
 
 console.log(passed + ' tests passed' + (process.exitCode ? ' (with failures)' : ''));
