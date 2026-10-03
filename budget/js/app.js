@@ -170,7 +170,6 @@
       '<button class="stat" data-act="page" data-val="debts"><div class="lbl">Debts</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' need balance' : 'all debts') + '</div></button>' +
       '<button class="stat" data-act="page" data-val="networth"><div class="lbl">Net worth</div><div class="val num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div><div class="per">assets − debts</div></button></div>';
 
-    h += runwayLine();
 
     // Earnings first, then Expenses, then One-offs (listed, never counted).
     var view = s.view, incomes = byOrder(S.items.filter(function (i) { return i.direction === 'in'; }));
