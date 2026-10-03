@@ -407,3 +407,60 @@ button.badge { cursor: pointer; }
 /* Live sharing */
 .invite { font-size: 30px; font-weight: 700; letter-spacing: .14em; margin: 4px 0 2px; }
 .mt8 { margin-top: 8px; }
+
+/* ================= Mockup style: cool greys, white cards, navy accent, coloured icon tiles ================= */
+:root {
+  --bg: #F4F5F7; --card: #FFFFFF; --sunken: #F2F4F7; --ink: #0F1B33; --ink-2: #667085; --muted: #98A2B3;
+  --line: #EAECF0; --track: #EEF0F3; --pos: #16A34A; --neg: #E5484D;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 14px rgba(16, 24, 40, .04);
+  --radius: 18px;
+}
+.top h1 { font-size: 32px; font-weight: 800; letter-spacing: -.03em; }
+.seg { background: #ECEEF2; }
+.seg button.on { box-shadow: 0 1px 3px rgba(11, 36, 71, .25); }
+
+/* Tiles */
+.stat { border-radius: 18px; border-color: transparent; padding: 14px 12px; }
+.stat .lbl { font-weight: 500; color: var(--ink-2); font-size: 13px; }
+.stat .val { font-size: 20px; font-weight: 700; color: var(--ink); }
+.stat .per { color: var(--muted); font-size: 12px; }
+.stat.left .val, .stat.left .per { color: var(--pos); }
+.stat.left.negative .val { color: var(--neg); }
+.stat.left.negative .per { color: var(--muted); }
+.stat > .ico { width: 34px; height: 34px; border-radius: 11px; margin-bottom: 10px; }
+
+/* Coloured icon tiles */
+.ico { border-radius: 12px; }
+.ico.t-blue { background: #E8F0FE; color: #2563EB; }
+.ico.t-green { background: #E7F6EC; color: #16A34A; }
+.ico.t-orange { background: #FFF1E3; color: #EA7A12; }
+.ico.t-red { background: #FDECEC; color: #E5484D; }
+.ico.t-purple { background: #F0EBFE; color: #7C5CF0; }
+.ico.t-pink { background: #FDEBF3; color: #DB2777; }
+.ico.t-teal { background: #E3F6F5; color: #0D9488; }
+.ico.t-slate { background: #EEF0F3; color: #475467; }
+
+/* Lists: one grouped white card, hairline dividers, no bars on category rows */
+.list, .cat-stack { background: var(--card); border: 0; border-radius: var(--radius); box-shadow: var(--shadow); }
+.cat-stack { display: block; overflow: hidden; }
+.cat-stack > .grp { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.cat-stack > .grp + .grp { border-top: 1px solid var(--line); }
+.cat-row .top-line .bar { display: none; }
+.cat-row .top-line:last-child { justify-content: flex-end; margin-top: -2px; }
+.cat-row .top-line .name { font-size: 16px; font-weight: 500; }
+.cat-row .pct { color: var(--muted); font-size: 12.5px; }
+.row { border-top-color: var(--line); }
+.grp-body { background: var(--sunken); }
+.grip { color: #C4CAD4; }
+.row .ico { width: 38px; height: 38px; }
+
+.section-head h2 { font-size: 20px; font-weight: 700; }
+.card, .runway { border-color: transparent; }
+
+/* Dark mode: keep the coloured tiles readable */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .seg { background: var(--sunken); }
+  :root:not([data-theme="light"]) .ico[class*="t-"] { background: rgba(255, 255, 255, .07); }
+}
+:root[data-theme="dark"] .seg { background: var(--sunken); }
+:root[data-theme="dark"] .ico[class*="t-"] { background: rgba(255, 255, 255, .07); }

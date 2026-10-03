@@ -86,7 +86,16 @@
   function srcBadge(src) {
     return '<button type="button" class="badge ' + (SOURCE_TONE[src] || '') + '" data-act="src-info" data-src="' + esc(src) + '">' + esc(SOURCE_LABEL[src] || src) + '</button>';
   }
-  function catIcon(c, cls) { return '<div class="ico ' + (cls || '') + '">' + icon(c ? c.icon : 'tag', 20) + '</div>'; }
+  // Soft coloured icon tiles, one colour family per kind of icon.
+  var TONE = { home: 'blue', education: 'blue', bank: 'blue', wallet: 'blue', building: 'blue', property: 'blue', globe: 'blue', umbrella: 'blue',
+    food: 'green', car: 'green', chart: 'green', cash: 'green', bike: 'green', fuel: 'green', coffee: 'green',
+    bolt: 'orange', crypto: 'orange', coins: 'orange', pin: 'orange', gold: 'orange', water: 'teal', shield: 'teal', boat: 'teal', plane: 'teal',
+    health: 'red', tv: 'red', heart: 'red', card: 'red', bag: 'pink', piggy: 'pink', gift: 'pink', gem: 'purple',
+    kids: 'purple', scissors: 'purple', baby: 'purple', music: 'purple', star: 'purple', book: 'purple', paw: 'orange', dumbbell: 'green',
+    laptop: 'slate', briefcase: 'slate', tag: 'slate', key: 'slate', wrench: 'slate', phone: 'slate', transfer: 'slate' };
+  function toneOf(key) { return TONE[key] || ['blue', 'green', 'orange', 'purple', 'teal', 'pink'][String(key).length % 6]; }
+  function icoTile(key, size) { return '<div class="ico t-' + toneOf(key) + '">' + icon(key || 'tag', size || 20) + '</div>'; }
+  function catIcon(c, cls) { return '<div class="ico t-' + toneOf(c ? c.icon : 'tag') + ' ' + (cls || '') + '">' + icon(c ? c.icon : 'tag', 20) + '</div>'; }
   function seg(key, options, current, cls) {
     return '<div class="seg ' + (cls || '') + '" role="tablist">' + options.map(function (o) {
       var on = String(o[0]) === String(current);
@@ -165,9 +174,9 @@
     // Assets, debts and net worth — one combined picture, each tile opens its detail.
     var nw = HF.netWorth(S);
     h += '<div class="stats mt12">' +
-      '<button class="stat" data-act="page" data-val="assets"><div class="lbl">Assets</div><div class="val num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts</div></button>' +
-      '<button class="stat" data-act="page" data-val="debts"><div class="lbl">Debts</div><div class="val num neg">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' need balance' : 'all debts') + '</div></button>' +
-      '<button class="stat" data-act="page" data-val="networth"><div class="lbl">Net worth</div><div class="val num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div><div class="per">assets − debts</div></button></div>';
+      '<button class="stat" data-act="page" data-val="assets">' + icoTile('bank', 18) + '<div class="lbl">Assets</div><div class="val num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts</div></button>' +
+      '<button class="stat" data-act="page" data-val="debts">' + icoTile('card', 18) + '<div class="lbl">Debts</div><div class="val num">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' need balance' : 'all debts') + '</div></button>' +
+      '<button class="stat" data-act="page" data-val="networth">' + icoTile('chart', 18) + '<div class="lbl">Net worth</div><div class="val num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div><div class="per">assets − debts</div></button></div>';
 
 
     // Earnings first, then Expenses, then One-offs (listed, never counted).
@@ -593,7 +602,7 @@
     if (payoff) bits.push('<span>' + payoff + '</span>');
     if (d.limit && bal > d.limit) bits.push('<span class="neg" style="font-weight:600">over limit by ' + money(bal - d.limit, { dp: 2 }) + '</span>');
     var util = d.limit && bal != null ? Math.min(100, bal / d.limit * 100) : null;
-    return '<div class="row swipe" role="button" tabindex="0" data-act="edit-debt" data-id="' + d.id + '" data-sort-id="' + d.id + '">' + grip() + '<div class="ico">' + icon('card', 20) + '</div><div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + bits.join('<span>·</span>') + '</div>' +
+    return '<div class="row swipe" role="button" tabindex="0" data-act="edit-debt" data-id="' + d.id + '" data-sort-id="' + d.id + '">' + grip() + '' + icoTile('card') + '<div class="main"><div class="name">' + esc(d.name) + '</div><div class="sub">' + bits.join('<span>·</span>') + '</div>' +
       (util != null ? '<div class="bar ' + (bal > d.limit ? 'over' : '') + '"><span style="width:' + util.toFixed(1) + '%"></span></div>' : '') + '</div>' +
       '<div class="amt num">' + (bal == null ? '<span class="muted" style="font-weight:600;font-size:13px">Balance not set</span>' : money(bal, { dp: 2 })) +
       '<small>' + (Number(d.payment) ? money(d.payment, { dp: 2 }) + ' / ' + ({ weekly: 'week', fortnightly: 'fortnight', monthly: 'month', quarterly: 'quarter' }[d.frequency] || d.frequency) : 'no repayment set') + '</small></div>' + swipeDel('debt', d.id) + '</div>';
@@ -636,7 +645,7 @@
   // A collapsible Net Worth section (tap to open in place).
   function nwSection(key, ic, name, sub, amt, cls, body, foot) {
     var open = ui.open[key];
-    return '<div class="grp' + (open ? ' open' : '') + '"><div class="row cat-row" role="button" tabindex="0" aria-expanded="' + !!open + '" data-act="toggle" data-id="' + key + '"><div class="ico">' + icon(ic, 20) + '</div>' +
+    return '<div class="grp' + (open ? ' open' : '') + '"><div class="row cat-row" role="button" tabindex="0" aria-expanded="' + !!open + '" data-act="toggle" data-id="' + key + '">' + icoTile(ic) + '' +
       '<div class="main"><div class="name">' + name + '</div><div class="sub">' + sub + '</div></div><div class="amt num ' + cls + '">' + amt + '</div>' + icon('chev', 18, 'chev') + '</div>' +
       (open ? body + '<div class="grp-foot">' + foot + '</div>' : '') + '</div>';
   }
@@ -656,7 +665,7 @@
       if (!list.length) return;
       // Groups start closed; tap a header to open it. Edit shows the drag grips.
       var tot = list.reduce(function (s, a) { return s + (Number(a.value) || 0); }, 0), key = 'asx_' + g.id, open = ui.open[key];
-      h += '<div class="grp' + (open ? ' open' : '') + '" data-sort-id="' + g.id + '"><div class="row cat-row" role="button" tabindex="0" data-act="toggle" data-id="' + key + '">' + grip() + '<div class="ico">' + icon(g.icon, 20) + '</div><div class="main"><div class="name">' + esc(g.name) + '</div><div class="sub">' + list.length + ' item' + (list.length === 1 ? '' : 's') + '</div></div><div class="amt num">' + money(tot, { dp: 0 }) + '</div>' + icon('chev', 18, 'chev') + '</div>' +
+      h += '<div class="grp' + (open ? ' open' : '') + '" data-sort-id="' + g.id + '"><div class="row cat-row" role="button" tabindex="0" data-act="toggle" data-id="' + key + '">' + grip() + '' + icoTile(g.icon) + '<div class="main"><div class="name">' + esc(g.name) + '</div><div class="sub">' + list.length + ' item' + (list.length === 1 ? '' : 's') + '</div></div><div class="amt num">' + money(tot, { dp: 0 }) + '</div>' + icon('chev', 18, 'chev') + '</div>' +
         (open ? '<div class="grp-body" data-sort-list="assets:' + g.id + '">' + list.map(assetRow).join('') + '</div>' +
           '<div class="grp-foot"><button class="link" data-act="add-asset" data-type="' + g.id + '">' + icon('plus', 16) + ' Add</button><button class="link" data-act="edit-assetcat" data-id="' + g.id + '">' + icon('edit', 14) + ' Edit category</button></div>' : '') + '</div>';
     });
@@ -708,7 +717,7 @@
     var swatches = window.LCTheme ? '<div class="field mt16"><span>Colour</span><div class="swatches" id="accentPick">' + Object.keys(LCTheme.THEMES).map(function (k) {
       var t = LCTheme.THEMES[k];
       return '<label><input type="radio" name="accent" value="' + k + '"' + (k === cur ? ' checked' : '') + '><span style="--sw:' + t.accent + '"><i></i>' + t.name + '</span></label>';
-    }).join('') + '</div><div class="hint">Colours Budget and the calculator keys. Sand keeps Apple’s orange keys.</div></div>' : '';
+    }).join('') + '</div><div class="hint">Colours Budget and the calculator keys. Navy and Sand keep Apple’s orange keys.</div></div>' : '';
     openSheet('Appearance', '<div class="field"><span>Mode</span></div><div class="choice" id="themePick">' + [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']].map(function (o) {
       return '<label><input type="radio" name="theme" value="' + o[0] + '"' + ((S.settings.theme || 'auto') === o[0] ? ' checked' : '') + '><span>' + o[1] + '</span></label>';
     }).join('') + '</div>' + swatches, function (el) {
