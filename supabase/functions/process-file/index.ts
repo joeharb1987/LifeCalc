@@ -58,7 +58,7 @@ function imageMime(mime: string, name: string) {
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["file_type", "as_at_date", "summary", "extracted_text", "link_item_id", "link_asset_id", "ai_note"],
+  required: ["file_type", "as_at_date", "summary", "extracted_text", "link_item_id", "link_asset_id", "ai_note", "folder_id"],
   properties: {
     file_type: { type: "string", enum: ["statement", "investment", "bill", "payslip", "other"] },
     as_at_date: { type: "string", description: "YYYY-MM-DD, or empty string if unknown" },
@@ -67,6 +67,7 @@ const SCHEMA = {
     link_item_id: { type: "string", description: "id from the budget lines list, or empty string" },
     link_asset_id: { type: "string", description: "id from the assets list, or empty string" },
     ai_note: { type: "string", description: "one sentence when the linked item/asset differs from the file, else empty string" },
+    folder_id: { type: "string", description: "id from the folders list, or empty string" },
   },
 };
 
@@ -79,16 +80,18 @@ Fields:
 - extracted_text: the key figures and transactions as plain text, one per line (e.g. "2026-09-03  WOOLWORTHS 1234  -180.50"), at most about 45,000 characters. For long files keep every line if it fits; otherwise keep totals and the largest items and say what was left out.
 - Never write a full account, card, BSB or member number: keep only the last 4 digits (e.g. ••••1234).
 - link_item_id / link_asset_id: only if the file obviously matches one of the budget lines or assets listed (e.g. a crypto portfolio → the matching crypto asset group's asset, an AGL bill → the AGL budget line). Use an id from the lists exactly, else empty string. Usually link to at most one.
-- ai_note: only when you linked something and the file shows a different value than the app (compare like with like; convert frequencies if needed). One sentence such as "File shows crypto $29,400 on 2 Oct; asset says $34,120." Do not recommend changing anything. Otherwise empty string.`;
+- ai_note: only when you linked something and the file shows a different value than the app (compare like with like; convert frequencies if needed). One sentence such as "File shows crypto $29,400 on 2 Oct; asset says $34,120." Do not recommend changing anything. Otherwise empty string.
+- folder_id: the household's own folder this file clearly belongs in, judged by the folder names (e.g. a bank statement → "Bank statements", a payslip → "Payslips" or "Joe's pay"). Use an id from the folders list exactly, else empty string. If no folder fits, leave it empty.`;
 
-function contextText(data: Any, f: Any) {
+function contextText(data: Any, f: Any, folders: Any[]) {
   const cats: Any = Object.fromEntries((data.categories || []).map((c: Any) => [c.id, c.name]));
   const acats: Any = Object.fromEntries((data.assetCats || []).map((c: Any) => [c.id, c.name]));
   const items = (data.items || []).filter((i: Any) => i.active !== false)
     .map((i: Any) => `${i.id} | ${i.name} | ${i.direction === "in" ? "income" : cats[i.categoryId] || "expense"} | $${i.amount} ${i.frequency}`);
   const assets = (data.assets || []).map((a: Any) => `${a.id} | ${a.name} | ${acats[a.type] || a.type} | $${a.value} | updated ${a.updated || "?"}`);
   const linked = f.linked_item_id ? `budget line ${f.linked_item_id}` : f.linked_asset_id ? `asset ${f.linked_asset_id}` : "";
-  return `File name: ${f.original_name}\n` + (linked ? `The user has linked this file to ${linked}: use that link (repeat its id) and compare against it for ai_note.\n` : "") + `\nBudget lines (id | name | category | amount frequency):\n${items.join("\n") || "(none)"}\n\nAssets (id | name | category | value | updated):\n${assets.join("\n") || "(none)"}`;
+  return `File name: ${f.original_name}\n` + (linked ? `The user has linked this file to ${linked}: use that link (repeat its id) and compare against it for ai_note.\n` : "") + `\nBudget lines (id | name | category | amount frequency):\n${items.join("\n") || "(none)"}\n\nAssets (id | name | category | value | updated):\n${assets.join("\n") || "(none)"}` +
+    (f.folder_id ? "" : `\n\nFolders (id | name):\n${folders.map((x: Any) => `${x.id} | ${x.name}`).join("\n") || "(none)"}`);
 }
 
 async function processFile(f: Any) {
@@ -105,6 +108,8 @@ async function processFile(f: Any) {
     const bytes = new Uint8Array(await obj.arrayBuffer());
     const hh = await (await fetch(`${SB_URL}/rest/v1/households?id=eq.${f.household_id}&select=data`, { headers: svc })).json();
     const data: Any = (hh[0] && hh[0].data) || {};
+    const folders: Any[] = await fetch(`${SB_URL}/rest/v1/file_folders?household_id=eq.${f.household_id}&select=id,name`, { headers: svc })
+      .then((r) => (r.ok ? r.json() : [])).catch(() => []);
 
     const content: Any[] = [];
     if (kind === "pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: encodeBase64(bytes) } });
@@ -115,7 +120,7 @@ async function processFile(f: Any) {
       if (total > MAX_TEXT_IN) text = text.slice(0, MAX_TEXT_IN);
       content.push({ type: "text", text: `<file name="${f.original_name}">\n${text}\n</file>` + (total > MAX_TEXT_IN ? `\n(The file is ${total} characters; only the first ${MAX_TEXT_IN} are included above. Say so in the summary.)` : "") });
     }
-    content.push({ type: "text", text: contextText(data, f) + "\n\nReturn the JSON record for this file." });
+    content.push({ type: "text", text: contextText(data, f, Array.isArray(folders) ? folders : []) + "\n\nReturn the JSON record for this file." });
 
     const client = new Anthropic({ apiKey: key });
     const msg = await client.beta.messages.stream({
@@ -151,6 +156,12 @@ async function processFile(f: Any) {
       else fields.ai_note = null;   // a note only makes sense next to a link
     }
     await patchFile(f.id, fields);
+    // Suggested folder: only if the file is still unfiled (the user may have filed it while it was being read).
+    if (!f.folder_id && out.folder_id && Array.isArray(folders) && folders.some((x: Any) => x.id === out.folder_id)) {
+      await fetch(`${SB_URL}/rest/v1/files?id=eq.${f.id}&folder_id=is.null`, {
+        method: "PATCH", headers: { ...svc, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ folder_id: out.folder_id }),
+      });
+    }
   } catch (e) {
     let message = String((e as Error)?.message || e);
     if (e instanceof Anthropic.AuthenticationError) message = "The Anthropic API key was rejected. Check the ANTHROPIC_API_KEY secret, then tap Retry.";
