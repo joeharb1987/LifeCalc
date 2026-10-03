@@ -4,6 +4,7 @@
   var KEY = 'lifecalc_accent_v1';
   // accent, accent text, soft fill (light) · accent text, soft fill (dark) · calculator operator key
   var THEMES = {
+    navy:  { name: 'Navy',  accent: '#0B2447', ink: '#0B2447', soft: '#E6EBF3', dInk: '#A9BEE3', dSoft: '#1A2333', dAccent: '#3D6DB8', op: '#FF9F0A' },
     sand:  { name: 'Sand',  accent: '#B58A5A', ink: '#8A6236', soft: '#F1E8DC', dInk: '#D2AA7C', dSoft: '#2B2620', op: '#FF9F0A' },
     sage:  { name: 'Sage',  accent: '#5E8C6A', ink: '#3F6B4B', soft: '#E3EEE5', dInk: '#9BC7A6', dSoft: '#1F2A23', op: '#3FA466' },
     ocean: { name: 'Ocean', accent: '#3F78A8', ink: '#2C5D88', soft: '#E1ECF5', dInk: '#93BBDF', dSoft: '#1C2733', op: '#2F8FE0' },
@@ -11,21 +12,21 @@
     rose:  { name: 'Rose',  accent: '#B5636E', ink: '#924652', soft: '#F6E3E5', dInk: '#E3A2AA', dSoft: '#2E1F22', op: '#E0566B' },
     slate: { name: 'Slate', accent: '#4A5568', ink: '#2F3A4C', soft: '#E5E8EE', dInk: '#AEB8C8', dSoft: '#222831', op: '#6B7A90' }
   };
-  function get() { try { var k = localStorage.getItem(KEY); return THEMES[k] ? k : 'sand'; } catch (e) { return 'sand'; } }
+  function get() { try { var k = localStorage.getItem(KEY); return THEMES[k] ? k : 'navy'; } catch (e) { return 'navy'; } }
   function lighten(hex, f) {
     var n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
     function m(c) { return Math.round(c + (255 - c) * f); }
     return 'rgb(' + m(r) + ',' + m(g) + ',' + m(b) + ')';
   }
   function apply(key) {
-    var t = THEMES[key] || THEMES.sand, el = document.getElementById('lcAccent');
+    var t = THEMES[key] || THEMES.navy, el = document.getElementById('lcAccent');
     if (!el) { el = document.createElement('style'); el.id = 'lcAccent'; document.head.appendChild(el); }
-    var dark = '--accent-ink:' + t.dInk + ';--accent-soft:' + t.dSoft + ';';
+    var dark = '--accent:' + (t.dAccent || t.accent) + ';--accent-ink:' + t.dInk + ';--accent-soft:' + t.dSoft + ';';
     var css = ':root{--accent:' + t.accent + ';--accent-ink:' + t.ink + ';--accent-soft:' + t.soft + ';--series-b:' + t.accent + ';}' +
       '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){' + dark + '}}' +
       ':root[data-theme="dark"]{' + dark + '}';
-    // Calculator: Sand keeps Apple's orange keys; other themes recolour the operator keys.
-    if (key !== 'sand') {
+    // Calculator: Navy and Sand keep Apple's orange keys; other themes recolour the operator keys.
+    if (key !== 'sand' && key !== 'navy') {
       css += ':root,body.dark,body{--op:' + t.op + ';--op-active-text:' + t.op + ';--op-press:' + lighten(t.op, .35) + ';--amber:' + t.op + ';}' +
         '.k-op,.k-eq{background:linear-gradient(180deg,' + lighten(t.op, .12) + ',' + t.op + ')!important;}';
     }
