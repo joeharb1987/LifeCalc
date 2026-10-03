@@ -1168,6 +1168,7 @@
   window.LCBudget = {
     get: function () { return S; },
     // Swipe right on a sub-page goes back one step (used by nav-swipe.js).
+    canBack: function () { return !!ui.page || !!document.getElementById('sheet'); },
     back: function () { if (document.getElementById('sheet')) return true; if (!ui.page) return false; ui.page = ui.stack.pop() || null; render(); window.scrollTo(0, 0); return true; },
     replace: function (data, keep) {
       var local = S.settings || {}, next = HF.migrate(JSON.parse(JSON.stringify(data)));
