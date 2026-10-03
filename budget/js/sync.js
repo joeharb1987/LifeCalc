@@ -162,6 +162,16 @@
     if (!active()) return Promise.resolve([]);
     return sb.from('household_members').select('email,role').eq('household_id', st.householdId).then(function (r) { return r.data || []; });
   }
+  // AI connector link (Claude / ChatGPT custom connector) for this household.
+  var MCP_URL = URL + '/functions/v1/lifecalc-mcp/';
+  function aiLink(create) {
+    if (!active()) return Promise.reject(new Error('Turn on Live sharing first'));
+    if (create) return sb.rpc('ai_token_create', { p_id: st.householdId }).then(function (r) { if (r.error) throw r.error; return MCP_URL + r.data; });
+    return sb.from('households').select('ai_token').eq('id', st.householdId).single().then(function (r) {
+      if (r.error) throw r.error; return r.data.ai_token ? MCP_URL + r.data.ai_token : null;
+    });
+  }
+  function aiRevoke() { return sb.rpc('ai_token_revoke', { p_id: st.householdId }).then(function (r) { if (r.error) throw r.error; }); }
   function signOut() {
     stopLive(); st = {}; pending = false; write(LKEY, null); write(BKEY, null);
     return sb ? sb.auth.signOut().then(function () { session = null; setStatus('off'); }) : Promise.resolve();
@@ -179,7 +189,7 @@
   root.HF = Object.assign(root.HF || {}, {
     sync: {
       init: init, changed: changed, pull: pull, label: label, signUp: signUp, signIn: signIn, signOut: signOut, start: start, join: join,
-      useHousehold: useHousehold, members: members, merge: merge,
+      useHousehold: useHousehold, members: members, merge: merge, aiLink: aiLink, aiRevoke: aiRevoke,
       state: function () { return { ready: !!sb, signedIn: !!session, email: session && session.user.email, householdId: st.householdId, invite: st.invite, name: st.name, status: status, appUrl: APP_URL }; }
     }
   });

@@ -685,6 +685,7 @@
     var h = top('Settings');
     h += '<button class="card profile" data-act="profile" style="width:100%;text-align:left"><div class="avatar">' + esc(initials(s.householdName || s.userName)) + '</div><div style="flex:1"><b>' + esc(s.householdName || 'Household') + '</b><span class="muted small">Household account · ' + esc(s.userName || '') + '</span></div>' + icon('chev', 18, 'chev') + '</button>';
     h += '<div class="list mt12">' + moreRow('sync', 'kids', 'Live sharing', HF.sync ? HF.sync.label() : 'Needs internet') +
+      moreRow('connect-ai', 'globe', 'Connect AI', 'Let Claude or ChatGPT read your live budget') +
       moreRow('ai', 'help', 'Copy for AI', 'Paste into Claude or ChatGPT for advice') + '</div>';
     h += '<div class="list mt12">' +
       moreRow('tab', 'transfer', 'Transactions', S.transactions.length + ' imported and cash entries', ' data-val="transactions"') +
@@ -1218,6 +1219,49 @@
       });
   }
 
+  // ---------- Connect AI: a private link Claude / ChatGPT use as a custom connector (read-only) ----------
+  function openConnectAI() {
+    var sy = HF.sync, st = sy && sy.state();
+    if (!sy || !st.ready || !st.householdId) {
+      openSheet('Connect AI', '<p class="muted" style="margin-top:0">Connect AI lets Claude or ChatGPT read your live budget whenever you ask, like a connected email account.</p>' +
+        '<div class="card pad">It reads the shared online copy, so <b>Live sharing</b> needs to be on first.</div>' +
+        '<button class="btn accent block mt12" id="caSync">Open Live sharing</button>', function (el) {
+          el.querySelector('#caSync').addEventListener('click', function () { openSync(); });
+        });
+      return;
+    }
+    function draw(url) {
+      var h = '<p class="muted" style="margin-top:0">Lets Claude or ChatGPT read your live budget (read-only) whenever you ask, e.g. “How are we tracking this month?” or “Plan our debt payoff”.</p>';
+      if (!url) {
+        h += '<button class="btn accent block" id="caMake">Create my private link</button>';
+      } else {
+        h += '<div class="card pad"><div class="lbl muted small">Your private link</div><div class="ca-url" id="caUrl">' + esc(url) + '</div>' +
+          '<div class="btn-row mt12"><button class="btn accent" id="caCopy">Copy link</button><button class="btn" id="caNew">New link</button></div></div>' +
+          '<div class="card pad mt12"><b>Add to Claude</b><ol class="ca-steps"><li>Open <b>claude.ai</b> (or the Claude app) → <b>Settings → Connectors</b>.</li><li>Tap <b>Add custom connector</b>.</li><li>Name: <b>LifeCalc</b>. URL: paste the link. Tap <b>Add</b>.</li><li>In a chat, ask about your budget. Claude asks before it first reads it.</li></ol></div>' +
+          '<div class="card pad mt12"><b>Add to ChatGPT</b><p class="muted small" style="margin-bottom:0">Settings → Apps &amp; Connectors → Advanced → turn on <b>Developer mode</b>, then <b>Create</b> a connector with this link (no authentication).</p></div>' +
+          '<p class="muted small">Anyone with this link can read your budget, so keep it private. If it leaks, tap <b>New link</b> (the old one stops working) or turn it off.</p>' +
+          '<button class="btn danger-text block" id="caOff">Turn off Connect AI</button>';
+      }
+      openSheet('Connect AI', h, function (el) {
+        function q(id) { return el.querySelector(id); }
+        if (q('#caMake')) q('#caMake').addEventListener('click', function () { this.disabled = true; sy.aiLink(true).then(draw).catch(syncErr); });
+        if (q('#caNew')) q('#caNew').addEventListener('click', function () {
+          if (!confirm('Make a new link? The current one stops working, so update it in Claude/ChatGPT.')) return;
+          sy.aiLink(true).then(function (u) { draw(u); toast('New link made'); }).catch(syncErr);
+        });
+        if (q('#caCopy')) q('#caCopy').addEventListener('click', function () {
+          (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(url) : Promise.reject()).then(function () { toast('Link copied'); })
+            .catch(function () { var r = document.createRange(); r.selectNodeContents(q('#caUrl')); var s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Select and copy the link'); });
+        });
+        if (q('#caOff')) q('#caOff').addEventListener('click', function () {
+          if (!confirm('Turn off Connect AI? Claude/ChatGPT will no longer be able to read your budget.')) return;
+          sy.aiRevoke().then(function () { draw(null); toast('Connect AI is off'); }).catch(syncErr);
+        });
+      });
+    }
+    sy.aiLink(false).then(draw).catch(syncErr);
+  }
+
   // ---------- Live sharing (Supabase) ----------
   function syncErr(e) { var m = (e && e.message) || 'Something went wrong'; if (/fetch|network/i.test(m)) m = 'No connection. Try again when online'; toast(m); }
   function openSync() {
@@ -1454,6 +1498,7 @@
     export: exportData,
     'share-data': shareData,
     ai: openAI,
+    'connect-ai': openConnectAI,
     sync: openSync,
     restore: function () { document.getElementById('restoreFile').click(); },
     reset: function () {
