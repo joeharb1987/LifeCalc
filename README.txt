@@ -6,7 +6,7 @@ LifeCalc — calculator (home screen) + Budget tab
 - manifest.json       one installable app
 - lifecalc-icon-*.png icons: 180 = apple-touch-icon, 192 / 512 = manifest,
                       1024 = master kept for the future native app
-- lifecalc-icon.svg   favicon (vector redraw of the 1024 master)
+- favicon-32.png / favicon-64.png   favicon (rounded corners, cut from the 1024 master)
 
 The old Money / Finance / Wealth placeholder screens were removed; the Budget tab replaces them.
 
