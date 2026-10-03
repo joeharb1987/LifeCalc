@@ -129,7 +129,6 @@
     m.innerHTML = item('Basic', '±÷', { href: '../#basic' }) + item('Scientific', '<i>f</i>(x)', { href: '../#sci' }) + item('Convert', '⇆', { href: '../#convert' }) +
       '<div class="sep"></div>' +
       item('Budget', icon('pie', 18), { 'data-act': 'tab', 'data-val': 'budget' }, tab === 'budget') +
-      item('Debts', icon('card', 18), { 'data-act': 'tab', 'data-val': 'debts' }, tab === 'debts') +
       item('Settings', icon('gear', 18), { 'data-act': 'tab', 'data-val': 'more' }, tab === 'more' || tab === 'transactions');
     document.body.appendChild(m);
     var r = btn.getBoundingClientRect();
@@ -1168,6 +1167,8 @@
   // Hooks for sync.js: read the state, replace it with the shared copy, refresh the status.
   window.LCBudget = {
     get: function () { return S; },
+    // Swipe right on a sub-page goes back one step (used by nav-swipe.js).
+    back: function () { if (document.getElementById('sheet')) return true; if (!ui.page) return false; ui.page = ui.stack.pop() || null; render(); window.scrollTo(0, 0); return true; },
     replace: function (data, keep) {
       var local = S.settings || {}, next = HF.migrate(JSON.parse(JSON.stringify(data)));
       next.settings = next.settings || {};
