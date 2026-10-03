@@ -291,7 +291,6 @@ html{background:#000;}
     <button id="modeConvert" role="menuitemradio"><span class="tick">&#10003;</span><span class="mi">&#8646;</span>Convert</button>
     <div class="sep"></div>
     <a href="./budget/#budget" role="menuitem"><span class="tick">&#10003;</span><span class="mi"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg></span>Budget</a>
-    <a href="./budget/#debts" role="menuitem"><span class="tick">&#10003;</span><span class="mi"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6.5 15h3"/></svg></span>Debts</a>
     <a href="./budget/#more" role="menuitem"><span class="tick">&#10003;</span><span class="mi"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span>Settings</a>
   </div>
 
@@ -1506,11 +1505,13 @@ if ("serviceWorker" in navigator) {
       e.preventDefault();                       // stop the delayed synthetic click (no double press)
       var t = e.changedTouches[0];
       var under = t && document.elementFromPoint(t.clientX, t.clientY);
+      if (window.__lcNavSwipe) return;          // that was a page swipe, not a key press
       if (under && btn.contains(under)) btn.click();
     }, { passive:false });
   });
 })();
 </script>
 
+<script src="./nav-swipe.js"></script>
 </body>
 </html>
