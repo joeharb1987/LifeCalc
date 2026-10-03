@@ -131,6 +131,8 @@ const TOOLS = [
   { name: "get_debts", description: "All debts as JSON: balance, interest rate, repayment, frequency, limit, end date, notes, active.", inputSchema: { type: "object", properties: {} } },
   { name: "get_assets", description: "All assets as JSON with category, value and date last updated, plus totals and net worth.", inputSchema: { type: "object", properties: {} } },
   { name: "get_transactions", description: "Imported bank transactions (negative = money out). Filter by date range, category name or text search.", inputSchema: { type: "object", properties: { from: { type: "string", description: "YYYY-MM-DD" }, to: { type: "string", description: "YYYY-MM-DD" }, category: { type: "string" }, search: { type: "string" }, limit: { type: "number", description: "Default 200, max 2000" } } } },
+  { name: "list_files", description: "Household files in the LifeCalc Files vault (statements, CSVs, screenshots, bills, payslips), newest as-at date first, with each file's AI summary and any ai_note (a difference between the file and the app's figures). Filter by type, as-at date range, or linked budget line/asset.", inputSchema: { type: "object", properties: { type: { type: "string", enum: ["statement", "investment", "bill", "payslip", "other"] }, from: { type: "string", description: "YYYY-MM-DD (as-at date from)" }, to: { type: "string", description: "YYYY-MM-DD (as-at date to)" }, linked_to: { type: "string", description: "Budget line or asset: its id or part of its name" } } } },
+  { name: "get_file", description: "One file from the Files vault with all fields, including extracted_text (key figures and transactions, account numbers masked) and a download URL valid for about 10 minutes.", inputSchema: { type: "object", properties: { id: { type: "string", description: "File id from list_files" } }, required: ["id"] } },
   { name: "get_monthly_spending", description: "Actual bank spending by category for each month (excludes internal transfers, cash deposits and investments), plus money in.", inputSchema: { type: "object", properties: { months: { type: "number", description: "How many recent months (default 6)" } } } },
 ];
 
@@ -176,10 +178,65 @@ function callTool(name: string, a: Any, S: Any, hname: string): string {
   throw new Error("Unknown tool: " + name);
 }
 
+// ---------- Files vault (read-only) ----------
+const svcHeaders = () => ({ apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` });
+async function filesOf(hid: string, cols: string) {
+  const r = await fetch(`${SB_URL}/rest/v1/files?household_id=eq.${hid}&select=${cols}&order=as_at_date.desc.nullslast,uploaded_at.desc`, { headers: svcHeaders() });
+  return r.ok ? await r.json() : [];
+}
+function linkLabel(S: Any, f: Any) {
+  const it = f.linked_item_id && (S.items || []).find((i: Any) => i.id === f.linked_item_id);
+  const as = f.linked_asset_id && (S.assets || []).find((a: Any) => a.id === f.linked_asset_id);
+  return it ? `budget line: ${it.name}` : as ? `asset: ${as.name}` : null;
+}
+async function filesSection(hid: string, S: Any) {
+  const files = await filesOf(hid, "file_type,as_at_date,original_name,ai_note,status");
+  if (!files.length) return "\n\n## Files vault\n- No files uploaded yet.";
+  const latest: Record<string, string> = {};
+  for (const f of files) if (f.as_at_date && (!latest[f.file_type] || f.as_at_date > latest[f.file_type])) latest[f.file_type] = f.as_at_date;
+  const out = ["", "", "## Files vault", `- ${files.length} file${files.length === 1 ? "" : "s"} (use list_files / get_file for details)`];
+  for (const t of Object.keys(latest)) out.push(`- Latest ${t}: as at ${latest[t]}`);
+  const notes = files.filter((f: Any) => f.ai_note);
+  if (notes.length) { out.push("- Differences between files and the app (nothing was changed):"); notes.forEach((f: Any) => out.push(`  - ${f.original_name}: ${f.ai_note}`)); }
+  const failed = files.filter((f: Any) => f.status === "failed").length;
+  if (failed) out.push(`- ${failed} file${failed === 1 ? "" : "s"} couldn't be read yet.`);
+  return out.join("\n");
+}
+async function fileTool(name: string, a: Any, h: Any): Promise<string> {
+  const S = h.data || {};
+  if (name === "list_files") {
+    let files = await filesOf(h.id, "id,original_name,file_type,as_at_date,summary,ai_note,status,linked_item_id,linked_asset_id,uploaded_at");
+    if (a.type) files = files.filter((f: Any) => f.file_type === a.type);
+    if (a.from) files = files.filter((f: Any) => f.as_at_date && f.as_at_date >= a.from);
+    if (a.to) files = files.filter((f: Any) => f.as_at_date && f.as_at_date <= a.to);
+    if (a.linked_to) {
+      const q = String(a.linked_to).toLowerCase();
+      const ids = new Set([...(S.items || []), ...(S.assets || [])].filter((x: Any) => x.id === a.linked_to || String(x.name).toLowerCase().includes(q)).map((x: Any) => x.id));
+      files = files.filter((f: Any) => ids.has(f.linked_item_id) || ids.has(f.linked_asset_id));
+    }
+    return JSON.stringify(files.map((f: Any) => ({ id: f.id, name: f.original_name, type: f.file_type, as_at: f.as_at_date, summary: f.summary, ai_note: f.ai_note || undefined,
+      status: f.status, linked_to: linkLabel(S, f) || undefined, uploaded_at: f.uploaded_at })), null, 1);
+  }
+  if (name === "get_file") {
+    if (!/^[0-9a-f-]{36}$/i.test(String(a.id || ""))) throw new Error("Give a file id from list_files.");
+    const r = await fetch(`${SB_URL}/rest/v1/files?id=eq.${a.id}&household_id=eq.${h.id}&select=*`, { headers: svcHeaders() });
+    const f = r.ok ? (await r.json())[0] : null;
+    if (!f) throw new Error("No such file in this household.");
+    const sg = await fetch(`${SB_URL}/storage/v1/object/sign/household-files/${f.storage_path}`, {
+      method: "POST", headers: { ...svcHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn: 600 }),
+    });
+    const sj = sg.ok ? await sg.json() : null;
+    const url = sj && (sj.signedURL || sj.signedUrl) ? `${SB_URL}/storage/v1${sj.signedURL || sj.signedUrl}` : null;
+    const { sha256: _h, storage_path: _p, household_id: _hh, ...rest } = f;
+    return JSON.stringify({ ...rest, linked_to: linkLabel(S, f), download_url: url, download_url_expires_in_seconds: url ? 600 : undefined }, null, 1);
+  }
+  throw new Error("Unknown tool: " + name);
+}
+
 // ---------- MCP over HTTP ----------
 async function loadHousehold(token: string) {
   if (!/^[a-f0-9]{64}$/.test(token)) return null;
-  const r = await fetch(`${SB_URL}/rest/v1/households?ai_token=eq.${token}&select=name,data`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
+  const r = await fetch(`${SB_URL}/rest/v1/households?ai_token=eq.${token}&select=id,name,data`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
   if (!r.ok) return null;
   const rows = await r.json();
   return rows[0] || null;
@@ -193,8 +250,8 @@ async function handle(msg: Any, token: string) {
     return reply(id, {
       protocolVersion: params.protocolVersion || "2025-03-26",
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "lifecalc", title: "LifeCalc Budget", version: "1.0.0" },
-      instructions: "Read-only access to the user's household budget in LifeCalc (amounts in AUD). Call get_budget_summary first, then the other tools for detail. Give practical, specific advice using the actual figures.",
+      serverInfo: { name: "lifecalc", title: "LifeCalc Budget", version: "1.1.0" },
+      instructions: "Read-only access to the user's household budget in LifeCalc (amounts in AUD). Call get_budget_summary first, then the other tools for detail. Uploaded statements, bills, payslips and screenshots are in the Files vault (list_files / get_file). Give practical, specific advice using the actual figures.",
     });
   }
   if (method === "ping") return reply(id, {});
@@ -203,7 +260,14 @@ async function handle(msg: Any, token: string) {
     const h = await loadHousehold(token);
     if (!h) return reply(id, { content: [{ type: "text", text: "This LifeCalc link is no longer valid. Create a new one in LifeCalc → Settings → Connect AI." }], isError: true });
     try {
-      return reply(id, { content: [{ type: "text", text: callTool(params.name, params.arguments || {}, h.data || {}, h.name || "Household") }] });
+      const args = params.arguments || {};
+      let text: string;
+      if (params.name === "list_files" || params.name === "get_file") text = await fileTool(params.name, args, h);
+      else {
+        text = callTool(params.name, args, h.data || {}, h.name || "Household");
+        if (params.name === "get_budget_summary") text += await filesSection(h.id, h.data || {});
+      }
+      return reply(id, { content: [{ type: "text", text }] });
     } catch (e) {
       return reply(id, { content: [{ type: "text", text: String((e as Error).message || e) }], isError: true });
     }
