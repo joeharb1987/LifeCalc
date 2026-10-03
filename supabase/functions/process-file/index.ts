@@ -87,18 +87,19 @@ function contextText(data: Any, f: Any) {
   const items = (data.items || []).filter((i: Any) => i.active !== false)
     .map((i: Any) => `${i.id} | ${i.name} | ${i.direction === "in" ? "income" : cats[i.categoryId] || "expense"} | $${i.amount} ${i.frequency}`);
   const assets = (data.assets || []).map((a: Any) => `${a.id} | ${a.name} | ${acats[a.type] || a.type} | $${a.value} | updated ${a.updated || "?"}`);
-  return `File name: ${f.original_name}\n\nBudget lines (id | name | category | amount frequency):\n${items.join("\n") || "(none)"}\n\nAssets (id | name | category | value | updated):\n${assets.join("\n") || "(none)"}`;
+  const linked = f.linked_item_id ? `budget line ${f.linked_item_id}` : f.linked_asset_id ? `asset ${f.linked_asset_id}` : "";
+  return `File name: ${f.original_name}\n` + (linked ? `The user has linked this file to ${linked}: use that link (repeat its id) and compare against it for ai_note.\n` : "") + `\nBudget lines (id | name | category | amount frequency):\n${items.join("\n") || "(none)"}\n\nAssets (id | name | category | value | updated):\n${assets.join("\n") || "(none)"}`;
 }
 
 async function processFile(f: Any) {
   try {
-    const key = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!key) throw new Error("AI isn't set up yet: add the ANTHROPIC_API_KEY secret in Supabase (Edge Functions → Secrets), then tap Retry.");
     const kind = kindOf(f.mime_type, f.original_name);
     if (kind === "other") {
       await patchFile(f.id, { status: "ready", error: null, summary: "Stored. The AI can only read PDFs, images (PNG/JPEG) and CSV/text files, so there's no summary for this one." });
       return;
     }
+    const key = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!key) throw new Error("AI isn't set up yet: add the ANTHROPIC_API_KEY secret in Supabase (Edge Functions → Secrets), then tap Retry.");
     const obj = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${f.storage_path}`, { headers: svc });
     if (!obj.ok) throw new Error(`Couldn't read the stored file (${obj.status})`);
     const bytes = new Uint8Array(await obj.arrayBuffer());
