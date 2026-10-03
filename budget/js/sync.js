@@ -100,7 +100,7 @@
   function stopLive() { if (channel && sb) { sb.removeChannel(channel); } channel = null; }
 
   function init() {
-    if (sb) return;
+    if (sb || /[?&]preview=1/.test(location.search)) return;   // the swipe preview copy never syncs
     if (!root.supabase || !root.supabase.createClient) { status = 'unavailable'; return; }
     sb = root.supabase.createClient(URL, KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'lifecalc-auth' } });
     sb.auth.onAuthStateChange(function (ev, s) { session = s; if (!s) stopLive(); setStatus(active() ? status : 'off'); });
