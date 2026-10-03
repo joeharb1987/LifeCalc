@@ -65,3 +65,7 @@ Project `lifecalc` (ref `qfcislqcszymihvyjrud`, Sydney). `budget/js/sync.js` kee
 - Each phone works offline and saves ~1s after a change. On a version clash it re-reads the server copy and merges record by record (three-way, against the last synced copy), so edits to different items on both phones are kept.
 - Realtime pushes updates to the other phone. Per-phone settings (name, view, theme, tab) aren't shared.
 - The browser only holds the publishable key; access is enforced by RLS.
+
+## Connect AI (Claude / ChatGPT connector)
+
+`supabase/functions/lifecalc-mcp` is a read-only MCP server (streamable HTTP, deployed with JWT verification off; the 64-hex `ai_token` in the URL is the credential). Settings → Connect AI calls `ai_token_create` / `ai_token_revoke` (members only) and shows `https://<project>.supabase.co/functions/v1/lifecalc-mcp/<token>` to paste into Claude → Settings → Connectors → Add custom connector. Tools: `get_budget_summary`, `get_items`, `get_debts`, `get_assets`, `get_transactions`, `get_monthly_spending`; totals use the same rules as the app. Unknown tokens get 401 for everything.

@@ -467,3 +467,7 @@ button.badge { cursor: pointer; }
 
 /* Copy for AI preview */
 .ai-preview { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; background: var(--card); border-radius: 12px; padding: 12px; max-height: 40vh; overflow: auto; color: var(--ink-2); }
+
+/* Connect AI */
+.ca-url { font: 12.5px/1.4 ui-monospace, Menlo, monospace; word-break: break-all; margin-top: 4px; color: var(--ink); user-select: all; -webkit-user-select: all; }
+.ca-steps { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
