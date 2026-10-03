@@ -190,7 +190,8 @@
     sync: {
       init: init, changed: changed, pull: pull, label: label, signUp: signUp, signIn: signIn, signOut: signOut, start: start, join: join,
       useHousehold: useHousehold, members: members, merge: merge, aiLink: aiLink, aiRevoke: aiRevoke,
-      state: function () { return { ready: !!sb, signedIn: !!session, email: session && session.user.email, householdId: st.householdId, invite: st.invite, name: st.name, status: status, appUrl: APP_URL }; }
+      client: function () { return sb; },
+      state: function () { return { ready: !!sb, signedIn: !!session, email: session && session.user.email, userId: session && session.user.id, householdId: st.householdId, invite: st.invite, name: st.name, status: status, appUrl: APP_URL }; }
     }
   });
   if (root.supabase) init();
