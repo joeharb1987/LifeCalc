@@ -1,0 +1,22 @@
+<!doctype html><html><head><style>
+html,body{margin:0;background:transparent}
+.c{width:1024px;height:1024px;position:relative;overflow:hidden;background:linear-gradient(180deg,#FCFBF8 0%,#F1EFEA 100%)}
+.g{position:absolute;left:50%;top:50%;width:var(--w);transform:translate(-50%,-50%)}
+.disp{height:calc(var(--w)*.27);border-radius:calc(var(--w)*.09);background:linear-gradient(180deg,#5E6575 0%,#2C3240 55%,#1D2230 100%);
+  box-shadow:0 14px 28px rgba(25,32,48,.22), inset 0 3px 0 rgba(255,255,255,.18), inset 0 -4px 0 rgba(0,0,0,.25)}
+.keys{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--w)*.045);margin-top:calc(var(--w)*.055)}
+.k{height:calc(var(--w)*.36);border-radius:calc(var(--w)*.1);display:grid;place-items:center;
+  background:linear-gradient(180deg,#FFFFFF 0%,#F2F3F6 55%,#E2E5EB 100%);
+  box-shadow:0 14px 26px rgba(25,32,48,.16),0 2px 4px rgba(25,32,48,.08), inset 0 2px 0 #fff, inset 0 -5px 0 rgba(30,40,60,.06)}
+.k.eq{background:linear-gradient(180deg,#78BEFF 0%,#2E8BFF 55%,#0A68F5 100%);box-shadow:0 16px 30px rgba(10,104,245,.35), inset 0 3px 0 rgba(255,255,255,.35), inset 0 -5px 0 rgba(0,40,120,.18)}
+svg{width:46%;height:auto;overflow:visible}
+</style></head><body>
+<div class="c" id="c"><div class="g" style="--w:var(--W)">
+ <div class="disp"></div>
+ <div class="keys">
+  <div class="k"><svg viewBox="0 0 100 100"><path d="M50 20V80M20 50H80" stroke="#262B36" stroke-width="15" stroke-linecap="round"/></svg></div>
+  <div class="k"><svg viewBox="0 0 100 100"><path d="M20 50H80" stroke="#262B36" stroke-width="15" stroke-linecap="round"/></svg></div>
+  <div class="k"><svg viewBox="0 0 100 100"><path d="M27 27L73 73M73 27L27 73" stroke="#262B36" stroke-width="15" stroke-linecap="round"/></svg></div>
+  <div class="k eq"><svg viewBox="0 0 100 100"><path d="M22 38H78M22 62H78" stroke="#F4F8FF" stroke-width="14" stroke-linecap="round"/></svg></div>
+ </div>
+</div></div></body></html>
