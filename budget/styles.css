@@ -471,3 +471,29 @@ button.badge { cursor: pointer; }
 /* Connect AI */
 .ca-url { font: 12.5px/1.4 ui-monospace, Menlo, monospace; word-break: break-all; margin-top: 4px; color: var(--ink); user-select: all; -webkit-user-select: all; }
 .ca-steps { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
+
+/* ================= Files vault ================= */
+.files-entry { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 12px; padding: 12px 14px; text-align: left; background: var(--card); border: 0; border-radius: 16px; box-shadow: var(--shadow); color: var(--ink); }
+.files-entry > div:not(.ico) { flex: 1; min-width: 0; }
+.files-entry b { display: block; font-size: 15px; font-weight: 600; }
+.files-entry span { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 1px; }
+.files-entry .chev { color: var(--muted); }
+.fx-upload { gap: 8px; margin-bottom: 6px; cursor: pointer; }
+label.icon-btn { cursor: pointer; }
+.fx-hint { margin: 0 4px 12px; }
+.fx-uploading { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-2); margin: 0 4px 10px; }
+.chip.on { background: var(--accent); color: var(--on-accent); }
+.fx-row .sub { gap: 6px; }
+.fx-sum { font-size: 13px; color: var(--ink-2); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge.fx-busy { background: rgba(70, 98, 140, .13); color: #3E5677; gap: 5px; }
+.badge.fx-fail { background: rgba(229, 72, 77, .13); color: var(--neg); }
+.fx-spin { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: fxspin .8s linear infinite; vertical-align: -1px; }
+@keyframes fxspin { to { transform: rotate(360deg); } }
+.fx-preview { background: var(--card); border-radius: 16px; overflow: hidden; min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; }
+.fx-preview img { max-width: 100%; max-height: 55vh; border-radius: 10px; display: block; }
+.fx-preview iframe { width: 100%; height: 55vh; border: 0; border-radius: 10px; background: #fff; }
+.fx-preview pre { width: 100%; margin: 0; max-height: 40vh; overflow: auto; font: 11.5px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--ink-2); }
+.fx-preview .link { margin-top: 6px; }
+.fx-meta { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+.fx-summary { margin: 8px 0 0; font-size: 15px; line-height: 1.45; white-space: pre-line; }
+.fx-note { margin-top: 12px; }

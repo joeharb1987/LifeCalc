@@ -114,14 +114,14 @@
 
   // ---------- Render ----------
   var TABS = ['budget', 'transactions', 'debts', 'more'];
-  var PAGE_TAB = { category: 'budget', networth: 'budget', assets: 'budget', debts: 'budget', reports: 'more' };
+  var PAGE_TAB = { category: 'budget', networth: 'budget', assets: 'budget', debts: 'budget', files: 'budget', reports: 'more' };
   function render() {
     var th = S.settings.theme || 'auto';
     if (th === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', th);
     var tab = TABS.indexOf(S.settings.tab) >= 0 ? S.settings.tab : 'budget';
     var html;
-    if (ui.page) html = { category: renderCategory, networth: renderNetWorth, assets: renderAssets, debts: renderDebts, reports: renderReports }[ui.page.name]();
+    if (ui.page) html = { category: renderCategory, networth: renderNetWorth, assets: renderAssets, debts: renderDebts, reports: renderReports, files: function () { return HF.files.render(); } }[ui.page.name]();
     else html = { budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab]();
     $app.innerHTML = html;
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
@@ -177,6 +177,10 @@
       '<button class="stat" data-act="page" data-val="assets">' + icoTile('bank', 18) + '<div class="lbl">Assets</div><div class="val num">' + money(nw.assets, { dp: 0 }) + '</div><div class="per">' + S.assets.length + ' accounts</div></button>' +
       '<button class="stat" data-act="page" data-val="debts">' + icoTile('card', 18) + '<div class="lbl">Debts</div><div class="val num">' + money(nw.liabilities, { dp: 0 }) + '</div><div class="per">' + (nw.missing.length ? nw.missing.length + ' need balance' : 'all debts') + '</div></button>' +
       '<button class="stat" data-act="page" data-val="networth">' + icoTile('chart', 18) + '<div class="lbl">Net worth</div><div class="val num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div><div class="per">assets − debts</div></button></div>';
+    // Files vault entry (statements, bills, screenshots, payslips)
+    var nFiles = HF.files && HF.files.count();
+    h += '<button class="files-entry" data-act="page" data-val="files">' + icoTile('upload', 18) + '<div><b>Files</b><span>' +
+      (nFiles ? nFiles + ' file' + (nFiles === 1 ? '' : 's') + ' · statements, bills, screenshots' : 'Statements, bills, screenshots, payslips') + '</span></div>' + icon('chev', 16, 'chev') + '</button>';
 
 
     // Earnings first, then Expenses, then One-offs (listed, never counted).
@@ -1340,6 +1344,9 @@
   // Hooks for sync.js: read the state, replace it with the shared copy, refresh the status.
   window.LCBudget = {
     get: function () { return S; },
+    render: function () { render(); },
+    // Shared UI helpers for files.js
+    ui: { top: top, esc: esc, toast: toast, openSheet: openSheet, closeSheet: function () { closeSheet(); }, empty: emptyBlock },
     // Swipe right on a sub-page goes back one step (used by nav-swipe.js).
     canBack: function () { return !!ui.page || !!document.getElementById('sheet'); },
     back: function () { if (document.getElementById('sheet')) return true; if (!ui.page) return false; ui.page = ui.stack.pop() || null; render(); window.scrollTo(0, 0); return true; },
