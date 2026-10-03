@@ -1,5 +1,5 @@
-// Swipe between the calculator and Budget, iOS style: the page follows your finger, the other page
-// is revealed underneath (preloaded in a hidden frame), and on release it snaps across or springs back.
+// Swipe between the calculator and Budget like a carousel: both pages are joined edge to edge and move
+// together with your finger (the other page is preloaded in a hidden frame); on release it snaps across or springs back.
 // Calculator: swipe left → Budget. Budget: swipe right → back one page, or to the calculator from a main screen.
 (function () {
   'use strict';
@@ -13,7 +13,7 @@
     ? '.sheet, .scrim, input, select, textarea, .chips, .grip, .seg, .app-menu, #pop'
     : '#displayPanel, .history-panel.open, #modeMenu, .paste-overlay, .clip-menu, input, select, textarea, .cat-row';
   var EASE = 'cubic-bezier(.2,.8,.2,1)';
-  var s = null, peek = null, frame = null, shade = null, ready = false, busy = false;
+  var s = null, peek = null, frame = null, ready = false, busy = false;
   window.__lcNavSwipe = false;
 
   function app() { return document.querySelector('.app'); }
@@ -30,9 +30,7 @@
     frame.src = PREVIEW; frame.tabIndex = -1; frame.title = '';
     frame.style.cssText = 'border:0;width:100%;height:100%;display:block;background:transparent';
     frame.addEventListener('load', function () { ready = true; });
-    shade = document.createElement('div');
-    shade.style.cssText = 'position:absolute;inset:0;background:#000;opacity:.25;pointer-events:none';
-    peek.appendChild(frame); peek.appendChild(shade);
+    peek.appendChild(frame);
     document.body.appendChild(peek);
   }
   function lift(on) {
@@ -40,10 +38,10 @@
     if (on) {
       a.style.position = 'relative'; a.style.zIndex = '1';
       a.style.background = getComputedStyle(document.body).backgroundColor;
-      a.style.boxShadow = '0 0 28px rgba(0,0,0,.28)'; a.style.willChange = 'transform';
+      a.style.willChange = 'transform';
       peek.style.visibility = 'visible';
     } else {
-      a.style.transform = ''; a.style.transition = ''; a.style.boxShadow = ''; a.style.willChange = '';
+      a.style.transform = ''; a.style.transition = ''; a.style.willChange = '';
       a.style.zIndex = ''; a.style.position = ''; a.style.background = '';
       if (peek) { peek.style.visibility = 'hidden'; frame.style.transform = ''; frame.style.transition = ''; }
     }
@@ -52,10 +50,9 @@
   function paint(p, animate) {
     var a = app(), w = W();
     var t = animate ? 'transform .26s ' + EASE : 'none';
-    a.style.transition = t; frame.style.transition = t; shade.style.transition = animate ? 'opacity .26s ' + EASE : 'none';
+    a.style.transition = t; frame.style.transition = t;
     a.style.transform = 'translateX(' + (DIR * p * w) + 'px)';
-    frame.style.transform = 'translateX(' + (-DIR * (1 - p) * w * 0.3) + 'px)';   // gentle parallax underneath
-    shade.style.opacity = String(0.25 * (1 - p));
+    frame.style.transform = 'translateX(' + (-DIR * (1 - p) * w) + 'px)';   // joined to this page's edge, moving with it
   }
 
   // ---------- Gesture ----------
