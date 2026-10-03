@@ -15,6 +15,7 @@ Plain HTML/CSS/JS, no build step. One manifest and service worker for the whole 
 - `js/importer.js` – CSV / pasted-text parsing, merchant rules, transfer detection, de-dupe (no PDF)
 - `js/icons.js` – line icon set (categories store an icon key)
 - `js/app.js` – UI
+- `js/files.js` – Files vault page (needs Live sharing)
 
 Data is saved in this browser's local storage (`hf_state_v1`, schema version 3). Use More → Export backup.
 
@@ -68,4 +69,13 @@ Project `lifecalc` (ref `qfcislqcszymihvyjrud`, Sydney). `budget/js/sync.js` kee
 
 ## Connect AI (Claude / ChatGPT connector)
 
-`supabase/functions/lifecalc-mcp` is a read-only MCP server (streamable HTTP, deployed with JWT verification off; the 64-hex `ai_token` in the URL is the credential). Settings → Connect AI calls `ai_token_create` / `ai_token_revoke` (members only) and shows `https://<project>.supabase.co/functions/v1/lifecalc-mcp/<token>` to paste into Claude → Settings → Connectors → Add custom connector. Tools: `get_budget_summary`, `get_items`, `get_debts`, `get_assets`, `get_transactions`, `get_monthly_spending`; totals use the same rules as the app. Unknown tokens get 401 for everything.
+`supabase/functions/lifecalc-mcp` is a read-only MCP server (streamable HTTP, deployed with JWT verification off; the 64-hex `ai_token` in the URL is the credential). Settings → Connect AI calls `ai_token_create` / `ai_token_revoke` (members only) and shows `https://<project>.supabase.co/functions/v1/lifecalc-mcp/<token>` to paste into Claude → Settings → Connectors → Add custom connector. Tools: `get_budget_summary`, `get_items`, `get_debts`, `get_assets`, `get_transactions`, `get_monthly_spending`, `list_files`, `get_file` (signed link valid 10 min); totals use the same rules as the app. Unknown tokens get 401 for everything.
+
+## Files vault
+
+Budget → Files. Private household finance files (statements, payslips, bills, screenshots, CSVs), max 20 MB each. Needs Live sharing (signed in to a household).
+
+- Table `public.files` (migration `supabase/migrations/20261003_files_vault.sql`), RLS: household members only. Duplicates blocked by `unique (household_id, sha256)`.
+- Storage: private bucket `household-files`, objects at `<household_id>/<uuid>-<name>`; storage policies check the folder is a household you belong to. Only short-lived signed URLs, never public ones.
+- `supabase/functions/process-file` (JWT on) reads each upload once with Claude: type, as-at date, summary, extracted text (≤ 50k chars), suggested link to a budget line or asset, and a note if that line/asset differs from the file. Account/card numbers are masked to the last 4 digits. It never edits the budget. PDF, images (PNG/JPEG/GIF/WebP) and text files (CSV, TXT, OFX, QIF, JSON…) are read; other types are stored without a summary.
+- Secret: `ANTHROPIC_API_KEY` in Supabase → Edge Functions → Secrets (server only). Without it, uploads show "Failed" with Retry.
