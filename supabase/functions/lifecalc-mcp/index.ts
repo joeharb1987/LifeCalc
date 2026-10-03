@@ -131,7 +131,7 @@ const TOOLS = [
   { name: "get_debts", description: "All debts as JSON: balance, interest rate, repayment, frequency, limit, end date, notes, active.", inputSchema: { type: "object", properties: {} } },
   { name: "get_assets", description: "All assets as JSON with category, value and date last updated, plus totals and net worth.", inputSchema: { type: "object", properties: {} } },
   { name: "get_transactions", description: "Imported bank transactions (negative = money out). Filter by date range, category name or text search.", inputSchema: { type: "object", properties: { from: { type: "string", description: "YYYY-MM-DD" }, to: { type: "string", description: "YYYY-MM-DD" }, category: { type: "string" }, search: { type: "string" }, limit: { type: "number", description: "Default 200, max 2000" } } } },
-  { name: "list_files", description: "Household files in the LifeCalc Files vault (statements, CSVs, screenshots, bills, payslips), newest as-at date first, with each file's AI summary and any ai_note (a difference between the file and the app's figures). Filter by type, as-at date range, or linked budget line/asset.", inputSchema: { type: "object", properties: { type: { type: "string", enum: ["statement", "investment", "bill", "payslip", "other"] }, from: { type: "string", description: "YYYY-MM-DD (as-at date from)" }, to: { type: "string", description: "YYYY-MM-DD (as-at date to)" }, linked_to: { type: "string", description: "Budget line or asset: its id or part of its name" } } } },
+  { name: "list_files", description: "Household files in the LifeCalc Files vault (statements, CSVs, screenshots, bills, payslips), newest as-at date first, with each file's AI summary and any ai_note (a difference between the file and the app's figures). Filter by folder, type, as-at date range, or linked budget line/asset.", inputSchema: { type: "object", properties: { folder: { type: "string", description: "The household's own folder name (or part of it), e.g. \"Bank statements\"; \"none\" for files not in a folder" }, type: { type: "string", enum: ["statement", "investment", "bill", "payslip", "other"] }, from: { type: "string", description: "YYYY-MM-DD (as-at date from)" }, to: { type: "string", description: "YYYY-MM-DD (as-at date to)" }, linked_to: { type: "string", description: "Budget line or asset: its id or part of its name" } } } },
   { name: "get_file", description: "One file from the Files vault with all fields, including extracted_text (key figures and transactions, account numbers masked) and a download URL valid for about 10 minutes.", inputSchema: { type: "object", properties: { id: { type: "string", description: "File id from list_files" } }, required: ["id"] } },
   { name: "get_monthly_spending", description: "Actual bank spending by category for each month (excludes internal transfers, cash deposits and investments), plus money in.", inputSchema: { type: "object", properties: { months: { type: "number", description: "How many recent months (default 6)" } } } },
 ];
@@ -184,17 +184,23 @@ async function filesOf(hid: string, cols: string) {
   const r = await fetch(`${SB_URL}/rest/v1/files?household_id=eq.${hid}&select=${cols}&order=as_at_date.desc.nullslast,uploaded_at.desc`, { headers: svcHeaders() });
   return r.ok ? await r.json() : [];
 }
+async function foldersOf(hid: string): Promise<Any[]> {
+  const r = await fetch(`${SB_URL}/rest/v1/file_folders?household_id=eq.${hid}&select=id,name&order=name`, { headers: svcHeaders() });
+  return r.ok ? await r.json() : [];
+}
+function folderName(folders: Any[], id: string | null) { const x = id && folders.find((f) => f.id === id); return x ? x.name : null; }
 function linkLabel(S: Any, f: Any) {
   const it = f.linked_item_id && (S.items || []).find((i: Any) => i.id === f.linked_item_id);
   const as = f.linked_asset_id && (S.assets || []).find((a: Any) => a.id === f.linked_asset_id);
   return it ? `budget line: ${it.name}` : as ? `asset: ${as.name}` : null;
 }
 async function filesSection(hid: string, S: Any) {
-  const files = await filesOf(hid, "file_type,as_at_date,original_name,ai_note,status");
+  const [files, folders] = await Promise.all([filesOf(hid, "file_type,as_at_date,original_name,ai_note,status,folder_id"), foldersOf(hid)]);
   if (!files.length) return "\n\n## Files vault\n- No files uploaded yet.";
   const latest: Record<string, string> = {};
   for (const f of files) if (f.as_at_date && (!latest[f.file_type] || f.as_at_date > latest[f.file_type])) latest[f.file_type] = f.as_at_date;
   const out = ["", "", "## Files vault", `- ${files.length} file${files.length === 1 ? "" : "s"} (use list_files / get_file for details)`];
+  if (folders.length) out.push("- Folders: " + folders.map((x: Any) => `${x.name} (${files.filter((f: Any) => f.folder_id === x.id).length})`).join(", "));
   for (const t of Object.keys(latest)) out.push(`- Latest ${t}: as at ${latest[t]}`);
   const notes = files.filter((f: Any) => f.ai_note);
   if (notes.length) { out.push("- Differences between files and the app (nothing was changed):"); notes.forEach((f: Any) => out.push(`  - ${f.original_name}: ${f.ai_note}`)); }
@@ -205,7 +211,16 @@ async function filesSection(hid: string, S: Any) {
 async function fileTool(name: string, a: Any, h: Any): Promise<string> {
   const S = h.data || {};
   if (name === "list_files") {
-    let files = await filesOf(h.id, "id,original_name,file_type,as_at_date,summary,ai_note,status,linked_item_id,linked_asset_id,uploaded_at");
+    const folders = await foldersOf(h.id);
+    let files = await filesOf(h.id, "id,original_name,file_type,as_at_date,summary,ai_note,status,linked_item_id,linked_asset_id,uploaded_at,folder_id");
+    if (a.folder) {
+      const q = String(a.folder).toLowerCase().trim();
+      if (q === "none") files = files.filter((f: Any) => !f.folder_id);
+      else {
+        const ids = new Set(folders.filter((x: Any) => x.id === a.folder || String(x.name).toLowerCase().includes(q)).map((x: Any) => x.id));
+        files = files.filter((f: Any) => ids.has(f.folder_id));
+      }
+    }
     if (a.type) files = files.filter((f: Any) => f.file_type === a.type);
     if (a.from) files = files.filter((f: Any) => f.as_at_date && f.as_at_date >= a.from);
     if (a.to) files = files.filter((f: Any) => f.as_at_date && f.as_at_date <= a.to);
@@ -215,7 +230,7 @@ async function fileTool(name: string, a: Any, h: Any): Promise<string> {
       files = files.filter((f: Any) => ids.has(f.linked_item_id) || ids.has(f.linked_asset_id));
     }
     return JSON.stringify(files.map((f: Any) => ({ id: f.id, name: f.original_name, type: f.file_type, as_at: f.as_at_date, summary: f.summary, ai_note: f.ai_note || undefined,
-      status: f.status, linked_to: linkLabel(S, f) || undefined, uploaded_at: f.uploaded_at })), null, 1);
+      status: f.status, folder: folderName(folders, f.folder_id) || undefined, linked_to: linkLabel(S, f) || undefined, uploaded_at: f.uploaded_at })), null, 1);
   }
   if (name === "get_file") {
     if (!/^[0-9a-f-]{36}$/i.test(String(a.id || ""))) throw new Error("Give a file id from list_files.");
@@ -227,8 +242,8 @@ async function fileTool(name: string, a: Any, h: Any): Promise<string> {
     });
     const sj = sg.ok ? await sg.json() : null;
     const url = sj && (sj.signedURL || sj.signedUrl) ? `${SB_URL}/storage/v1${sj.signedURL || sj.signedUrl}` : null;
-    const { sha256: _h, storage_path: _p, household_id: _hh, ...rest } = f;
-    return JSON.stringify({ ...rest, linked_to: linkLabel(S, f), download_url: url, download_url_expires_in_seconds: url ? 600 : undefined }, null, 1);
+    const { sha256: _h, storage_path: _p, household_id: _hh, folder_id: _fid, ...rest } = f;
+    return JSON.stringify({ ...rest, folder: folderName(await foldersOf(h.id), f.folder_id), linked_to: linkLabel(S, f), download_url: url, download_url_expires_in_seconds: url ? 600 : undefined }, null, 1);
   }
   throw new Error("Unknown tool: " + name);
 }

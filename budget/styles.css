@@ -497,3 +497,29 @@ label.icon-btn { cursor: pointer; }
 .fx-meta { font-size: 13px; color: var(--ink-2); font-weight: 500; }
 .fx-summary { margin: 8px 0 0; font-size: 15px; line-height: 1.45; white-space: pre-line; }
 .fx-note { margin-top: 12px; }
+
+/* Files vault: folders, select mode, banners */
+.fx-folders { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.fx-folder { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; background: var(--card); border: 0; border-radius: 16px; box-shadow: var(--shadow); color: var(--ink); text-align: left; min-height: 96px; }
+.fx-folder .ico { width: 36px; height: 36px; margin-bottom: 8px; }
+.fx-folder b { font-size: 15px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-folder > span:last-child { font-size: 12.5px; color: var(--ink-2); }
+.fx-start { margin-bottom: 18px; }
+.fx-start p { margin: 4px 0 12px; }
+.chips.wrap { flex-wrap: wrap; overflow: visible; margin-bottom: 0; }
+.fx-banner { margin-bottom: 16px; }
+.fx-banner p { margin: 4px 0 12px; }
+.fx-banner code { font-size: 12px; background: var(--sunken); padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
+.badge.fx-wait { background: rgba(234, 122, 18, .13); color: #B45F0E; }
+.fx-list-head { margin-top: 4px; }
+.fx-check { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; flex: 0 0 auto; margin: 0 7px; color: var(--on-accent); }
+.fx-row.fx-on .fx-check { background: var(--accent); border-color: var(--accent); }
+.fx-row.fx-on { background: var(--accent-soft); }
+.fx-move .ico { width: 36px; height: 36px; }
+.fx-move.fx-on { color: var(--accent-ink); }
+.fx-selbar { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 12px); z-index: 30; padding: 0 16px; pointer-events: none; }
+.fx-selbar-in { max-width: 520px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 16px; background: var(--card); border-radius: 18px; box-shadow: 0 8px 30px rgba(22, 35, 58, .22); pointer-events: auto; }
+.fx-selbar-in b { flex: 1; font-size: 14px; font-weight: 600; }
+.fx-selbar .btn { flex: 0 0 auto; min-height: 38px; padding: 0 14px; gap: 6px; }
+.fx-selbar .btn[disabled] { opacity: .45; }
+[data-files-page].fx-selecting ~ .list { margin-bottom: 80px; }

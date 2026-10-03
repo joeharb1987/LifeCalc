@@ -121,7 +121,7 @@
     else document.documentElement.setAttribute('data-theme', th);
     var tab = TABS.indexOf(S.settings.tab) >= 0 ? S.settings.tab : 'budget';
     var html;
-    if (ui.page) html = { category: renderCategory, networth: renderNetWorth, assets: renderAssets, debts: renderDebts, reports: renderReports, files: function () { return HF.files.render(); } }[ui.page.name]();
+    if (ui.page) html = { category: renderCategory, networth: renderNetWorth, assets: renderAssets, debts: renderDebts, reports: renderReports, files: function () { return HF.files.render(ui.page.id); } }[ui.page.name]();
     else html = { budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab]();
     $app.innerHTML = html;
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
@@ -179,8 +179,8 @@
       '<button class="stat" data-act="page" data-val="networth">' + icoTile('chart', 18) + '<div class="lbl">Net worth</div><div class="val num ' + (nw.net < 0 ? 'neg' : '') + '">' + money(nw.net, { dp: 0 }) + '</div><div class="per">assets − debts</div></button></div>';
     // Files vault entry (statements, bills, screenshots, payslips)
     var nFiles = HF.files && HF.files.count();
-    h += '<button class="files-entry" data-act="page" data-val="files">' + icoTile('upload', 18) + '<div><b>Files</b><span>' +
-      (nFiles ? nFiles + ' file' + (nFiles === 1 ? '' : 's') + ' · statements, bills, screenshots' : 'Statements, bills, screenshots, payslips') + '</span></div>' + icon('chev', 16, 'chev') + '</button>';
+    h += '<button class="files-entry" data-act="page" data-val="files">' + icoTile('folder', 18) + '<div><b>Files</b><span>' +
+      (nFiles ? nFiles + ' file' + (nFiles === 1 ? '' : 's') + ' · your folders' : 'Statements, bills, payslips, in your own folders') + '</span></div>' + icon('chev', 16, 'chev') + '</button>';
 
 
     // Earnings first, then Expenses, then One-offs (listed, never counted).
