@@ -684,7 +684,8 @@
     var s = S.settings;
     var h = top('Settings');
     h += '<button class="card profile" data-act="profile" style="width:100%;text-align:left"><div class="avatar">' + esc(initials(s.householdName || s.userName)) + '</div><div style="flex:1"><b>' + esc(s.householdName || 'Household') + '</b><span class="muted small">Household account · ' + esc(s.userName || '') + '</span></div>' + icon('chev', 18, 'chev') + '</button>';
-    h += '<div class="list mt12">' + moreRow('sync', 'kids', 'Live sharing', HF.sync ? HF.sync.label() : 'Needs internet') + '</div>';
+    h += '<div class="list mt12">' + moreRow('sync', 'kids', 'Live sharing', HF.sync ? HF.sync.label() : 'Needs internet') +
+      moreRow('ai', 'help', 'Copy for AI', 'Paste into Claude or ChatGPT for advice') + '</div>';
     h += '<div class="list mt12">' +
       moreRow('tab', 'transfer', 'Transactions', S.transactions.length + ' imported and cash entries', ' data-val="transactions"') +
       moreRow('settings', 'gear', 'Household settings', 'Manual cash in totals') +
@@ -1098,6 +1099,125 @@
   }
 
   // ---------- Data ----------
+  // ---------- Copy for AI: the whole budget as readable text, with a question on top ----------
+  var AI_ASKS = [
+    ['review', 'Full review', 'You are a careful, practical financial adviser in Australia. Review our household budget below and tell us: 1) where we are overspending and realistic savings with $ amounts, 2) the best order to pay off our debts and roughly when each is gone, 3) whether we are on track and the 3 most important next steps. Ask me questions if anything is unclear.'],
+    ['save', 'Find savings', 'You are a practical money coach in Australia. Using our household budget below, find the 5–10 best places we could save money, with an estimated $ saving per week for each and how hard it would be. Be specific to the items listed.'],
+    ['debt', 'Debt payoff plan', 'You are a debt counsellor in Australia. Using the debts, rates, repayments and our left-over money below, make a payoff plan. Compare avalanche (highest rate first) and snowball (smallest balance first), show the order, monthly payments and roughly when each debt is cleared, and say which you recommend for us.'],
+    ['track', 'Are we on track?', 'Looking at our household budget below, are we on track financially? What is our biggest risk, how much buffer do we have, and what single change would help most? Keep it short and plain.']
+  ];
+  function aiText(askKey, hideNames) {
+    var view = S.settings.view, per = VIEW_SHORT[view], sum = HF.budgetSummary(S, view), nw = HF.netWorth(S), out = [];
+    var ask = (AI_ASKS.filter(function (a) { return a[0] === askKey; })[0] || AI_ASKS[0])[2];
+    var nm = function (it) { return it.name; };
+    var m0 = function (v) { return money(v, { dp: 0 }); }, m2 = function (v) { return money(v, { dp: 2 }); };
+    function line(it) {
+      var v = it.frequency === 'oneoff' ? Number(it.amount) || 0 : conv(it, view);
+      var bits = [m2(Number(it.amount) || 0) + ' ' + HF.freqLabel(it)];
+      if (it.frequency !== 'oneoff') bits.push('= ' + m0(v) + per);
+      bits.push(SOURCE_LABEL[it.source] || it.source);
+      if (it.endDate) bits.push('ends ' + HF.fmtDate(it.endDate, true));
+      if (it.startDate) bits.push('starts ' + HF.fmtDate(it.startDate, true));
+      if (it.review) bits.push('needs review');
+      if (it.notes) bits.push('note: ' + it.notes);
+      return '- ' + nm(it) + ': ' + bits.join(' · ');
+    }
+    out.push(ask, '', '# Our household budget', 'Exported from LifeCalc on ' + HF.fmtDate(todayISO(), true) + '. Amounts in AUD, shown ' + VIEW_WORD[view] + 'ly unless noted.' +
+      (S.settings.includeCash ? ' Includes cash income/spending we entered by hand.' : ' Bank figures only.'), '');
+    out.push('## Totals', '- Income: ' + m0(sum.income) + per, '- Expenses: ' + m0(sum.expenses) + per, '- Left over: ' + m0(sum.available) + per, '');
+    var incomes = byOrder(S.items.filter(function (i) { return i.direction === 'in' && !isCancelled(i); }));
+    out.push('## Income'); incomes.forEach(function (it) { out.push(line(it)); }); out.push('');
+    out.push('## Expenses by category');
+    expenseCats().forEach(function (c) {
+      if (c.type === 'oneoff') return;
+      var items = catItems(c.id).filter(function (i) { return !HF.isOneOff(S, i) && !isCancelled(i); });
+      if (!items.length) return;
+      var v = sum.byCat[c.id] || 0;
+      out.push('### ' + c.name + ' — ' + m0(v) + per + (sum.expenses ? ' (' + Math.round(v / sum.expenses * 100) + '%)' : ''));
+      items.forEach(function (it) { out.push(line(it)); });
+    });
+    out.push('');
+    var ones = S.items.filter(function (i) { return i.direction === 'out' && HF.isOneOff(S, i) && !isCancelled(i); });
+    if (ones.length) { out.push('## One-off costs (not in the totals above)'); ones.forEach(function (it) { out.push(line(it)); }); out.push(''); }
+    var debts = byOrder(S.debts).filter(function (d) { return d.active !== false; });
+    if (debts.length) {
+      out.push('## Debts');
+      debts.forEach(function (d, i) {
+        var bits = [d.balance == null || d.balance === '' ? 'balance not set' : 'balance ' + m2(d.balance)];
+        if (d.rate != null && d.rate !== '') bits.push(d.rate + '% p.a.');
+        if (Number(d.payment)) bits.push('repaying ' + m2(d.payment) + ' ' + (d.frequency || 'monthly'));
+        if (d.limit) bits.push('limit ' + m0(d.limit));
+        if (d.endDate) bits.push('ends ' + HF.fmtDate(d.endDate, true));
+        if (d.notes) bits.push('note: ' + d.notes);
+        out.push('- ' + d.name + ': ' + bits.join(' · '));
+      });
+      out.push('');
+    }
+    out.push('## Assets');
+    assetCats().forEach(function (g) {
+      var list = assetsIn(g.id); if (!list.length) return;
+      out.push('- ' + g.name + ': ' + m0(list.reduce(function (a, x) { return a + (Number(x.value) || 0); }, 0)) +
+        ' (' + list.map(function (a) { return a.name + ' ' + m0(a.value); }).join(', ') + ')');
+    });
+    out.push('', '## Net worth', '- Assets ' + m0(nw.assets) + ' − debts ' + m0(nw.liabilities) + ' = ' + m0(nw.net) +
+      (nw.missing.length ? ' (' + nw.missing.length + ' debts have no balance entered yet, so real net worth is lower)' : ''), '');
+    var win = bankWindow();
+    if (win) {
+      var byCat = {}, inc = 0;
+      S.transactions.forEach(function (t) {
+        if (t.date < win.start || t.date > win.end || HF.txExcluded(S, t)) return;
+        if (t.amount > 0) inc += t.amount; else { var c = cat(t.category_id); var k = c ? c.name : 'Uncategorised'; byCat[k] = (byCat[k] || 0) - t.amount; }
+      });
+      out.push('## Actual bank spending, last ' + win.weeks + ' weeks (' + HF.fmtDate(win.start, true) + ' – ' + HF.fmtDate(win.end, true) + '), average per week');
+      out.push('- Money in: ' + m0(inc / win.weeks) + '/wk');
+      Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; }).forEach(function (k) { out.push('- ' + k + ': ' + m0(byCat[k] / win.weeks) + '/wk'); });
+      out.push('');
+    }
+    var text = out.join('\n');
+    if (hideNames) {
+      // Swap every family name (you, partner, kids, income earners) for Person A, B, C… everywhere, notes included.
+      var names = {};
+      String((S.settings.userName || '') + ' ' + (S.settings.householdName || '')).split(/[^A-Za-z]+/).forEach(function (w) { if (w.length > 2) names[w] = 1; });
+      S.items.forEach(function (i) { if (i.direction === 'in') { var w = String(i.name).split(/[^A-Za-z]+/)[0]; if (w && w.length > 2 && !/^(family|tax|income|salary|wage|pay|centrelink|benefit)$/i.test(w)) names[w] = 1; } });
+      S.accounts.concat(S.assets).forEach(function (a) { if (a.type === 'kids') { var w = String(a.name).split(/[^A-Za-z]+/)[0]; if (w && w.length > 2) names[w] = 1; } });
+      Object.keys(names).sort(function (x, y) { return y.length - x.length; }).forEach(function (n, i) {
+        text = text.replace(new RegExp('\\b' + n + "('s)?\\b", 'gi'), 'Person ' + String.fromCharCode(65 + i % 26) + '$1');
+      });
+    }
+    return text;
+  }
+  function openAI() {
+    var cur = ui.aiAsk || 'review', hide = !!ui.aiHide;
+    openSheet('Copy for AI', '<p class="muted" style="margin-top:0">Copies your whole budget as text, with a question at the top. Paste it into Claude or ChatGPT and keep chatting from there.</p>' +
+      '<div class="field"><span>What should it look at?</span><div class="choice" id="aiAsk">' + AI_ASKS.map(function (a) {
+        return '<label><input type="radio" name="aiask" value="' + a[0] + '"' + (a[0] === cur ? ' checked' : '') + '><span>' + a[1] + '</span></label>';
+      }).join('') + '</div></div>' +
+      toggleHtml('aihide', 'Hide names', 'Family names (yours, Zhila’s, the kids’) become Person A, B, C…', hide) +
+      '<div class="btn-row mt12"><button class="btn accent" id="aiCopy">Copy</button><button class="btn" id="aiShare">Share…</button></div>' +
+      '<details class="mt12"><summary class="muted small">Preview</summary><pre class="ai-preview" id="aiPrev"></pre></details>',
+      function (el) {
+        function text() { return aiText(ui.aiAsk || 'review', !!ui.aiHide); }
+        function prev() { el.querySelector('#aiPrev').textContent = text(); }
+        prev();
+        el.querySelector('#aiAsk').addEventListener('change', function (e) { ui.aiAsk = e.target.value; prev(); });
+        el.querySelector('[name="aihide"]').addEventListener('change', function (e) { ui.aiHide = e.target.checked; prev(); });
+        el.querySelector('#aiCopy').addEventListener('click', function () {
+          var t = text();
+          (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(t) : Promise.reject())
+            .then(function () { toast('Copied. Paste it into Claude or ChatGPT'); })
+            .catch(function () {
+              var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+              document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Copied. Paste it into Claude or ChatGPT'); } catch (e) { toast('Could not copy'); } ta.remove();
+            });
+        });
+        el.querySelector('#aiShare').addEventListener('click', function () {
+          var t = text();
+          if (navigator.share) navigator.share({ title: 'Our budget', text: t }).catch(function () {});
+          else el.querySelector('#aiCopy').click();
+        });
+      });
+  }
+
   // ---------- Live sharing (Supabase) ----------
   function syncErr(e) { var m = (e && e.message) || 'Something went wrong'; if (/fetch|network/i.test(m)) m = 'No connection. Try again when online'; toast(m); }
   function openSync() {
@@ -1333,6 +1453,7 @@
     },
     export: exportData,
     'share-data': shareData,
+    ai: openAI,
     sync: openSync,
     restore: function () { document.getElementById('restoreFile').click(); },
     reset: function () {
