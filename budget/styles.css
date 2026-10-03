@@ -464,3 +464,6 @@ button.badge { cursor: pointer; }
 }
 :root[data-theme="dark"] .seg { background: var(--sunken); }
 :root[data-theme="dark"] .ico[class*="t-"] { background: rgba(255, 255, 255, .07); }
+
+/* Copy for AI preview */
+.ai-preview { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; background: var(--card); border-radius: 12px; padding: 12px; max-height: 40vh; overflow: auto; color: var(--ink-2); }
