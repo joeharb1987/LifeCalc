@@ -224,7 +224,7 @@
   function fileRow(f, showFolder) {
     var u = U(), sel = st.sel, on = sel && sel[f.id], fo = showFolder && f.folder_id && folderById(f.folder_id), ln = linkName(f);
     var sub = typeName(f.file_type) + ' · ' + fmtDate(f.as_at_date) + (fo ? ' · ' + u.esc(fo.name) : '');
-    var text = waitingForKey(f) ? 'Saved. The summary appears once AI is switched on.' :
+    var text = waitingForKey(f) ? 'Saved. Ask Claude to “summarise my LifeCalc files” to read it.' :
       f.status === 'failed' ? (f.error || 'Couldn’t read this file') : f.summary || (f.status === 'processing' ? 'Reading the file…' : '');
     return '<div class="row fx-row' + (on ? ' fx-on' : '') + '" role="button" tabindex="0" data-fx="' + (sel ? 'toggle' : 'open') + '" data-id="' + f.id + '">' +
       (sel ? '<div class="fx-check">' + (on ? icon('check', 16) : '') + '</div>' :
@@ -237,7 +237,7 @@
     var keyWait = list.filter(waitingForKey).length, failed = list.filter(needsRetry).length;
     if (!failed) return '';
     if (keyWait === failed) return '<div class="card pad fx-banner"><b>AI reading is off</b><p class="muted small">Your ' + (keyWait > 1 ? keyWait + ' files are' : 'file is') +
-      ' safely stored. To get summaries, add the <code>ANTHROPIC_API_KEY</code> secret in Supabase → Edge Functions → Secrets. They’ll be read automatically next time you open Files.</p>' +
+      ' safely stored. To read them now, open Claude (with the LifeCalc connector) and say <b>“Summarise my LifeCalc files”</b>. Summaries and folders appear here. Or add an <code>ANTHROPIC_API_KEY</code> secret in Supabase to have every upload read automatically.</p>' +
       '<button class="btn block" data-fx="retry-all">Try again now</button></div>';
     return '<div class="card pad fx-banner"><b>' + failed + ' file' + (failed > 1 ? 's' : '') + ' couldn’t be read</b><p class="muted small">Tap a file to see why, or try them all again.</p>' +
       '<button class="btn block" data-fx="retry-all">Retry all</button></div>';
@@ -374,7 +374,7 @@
     var h = '<div class="fx-preview" id="fxPrev"><span class="muted small">Loading preview…</span></div>';
     h += '<div class="card pad mt12"><div class="fx-meta">' + typeName(f.file_type) + ' · as at ' + fmtDate(f.as_at_date) + ' · ' + kb(f.size_bytes) + '</div>';
     if (busy) h += '<p class="muted"><i class="fx-spin"></i> Reading the file. This usually takes under a minute.</p>';
-    else if (waitingForKey(f)) h += '<p class="muted">Saved. The AI summary appears once AI is switched on (add the ANTHROPIC_API_KEY secret in Supabase).</p><button class="btn block" data-fx="retry" data-id="' + id + '">Try again</button>';
+    else if (waitingForKey(f)) h += '<p class="muted">Saved. To read it, ask Claude (with the LifeCalc connector): “Summarise my LifeCalc files”.</p><button class="btn block" data-fx="retry" data-id="' + id + '">Try again</button>';
     else if (needsRetry(f)) h += '<p class="neg">' + u.esc(f.error || 'This is taking too long.') + '</p><button class="btn block" data-fx="retry" data-id="' + id + '">Retry</button>';
     else h += '<p class="fx-summary">' + u.esc(f.summary || 'No summary.') + '</p>';
     if (f.ai_note) h += '<div class="note fx-note"><b>Check:</b> ' + u.esc(f.ai_note) + '<br><span class="muted small">Nothing in your budget was changed.</span></div>';
