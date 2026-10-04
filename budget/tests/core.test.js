@@ -51,14 +51,12 @@ t('statement averages counted by default and labelled', () => {
   close(sum(S, 'weekly').variable, 171.22 + 109.66 + 77.25 + 48.38 + 33.42 + 7.13);
 });
 
-t('household/business toggle', () => {
-  const S = HF.seed();
-  close(sum(S).byCat.c_tax, 3068, 'household tax');
-  assert.ok(!sum(S).byCat.c_business);
-  close(sum(S, 'weekly').businessExcluded, (228 + 88 + 50) / 2 + (21.95 + 30.75) * 12 / 52);
-  S.settings.includeBusiness = true;
-  close(sum(S).byCat.c_tax, 11284, 'tax incl. business');
-  close(sum(S).byCat.c_business, (21.95 + 30.75) * 12);
+t('everything counts as one household (no business split)', () => {
+  const S = HF.migrate(HF.seed());
+  assert.strictEqual(S.settings.includeBusiness, true);
+  close(sum(S).byCat.c_tax, 11284, 'tax incl. JZD plans');
+  close(sum(S).byCat.c_business, (21.95 + 30.75) * 12, 'business software counted');
+  assert.ok(!sum(S, 'weekly').businessExcluded, 'nothing left out');
 });
 
 t('AGL split with arrears end date', () => {
@@ -115,12 +113,11 @@ t('debts: fields and JZD ATO business debt', () => {
   assert.ok(S.debts.find(d => d.name === 'AGL arrears').endDate.startsWith('2027-02'));
 });
 
-t('net worth scopes', () => {
-  const S = HF.seed();
-  const h = HF.netWorth(S, 'household');
-  close(h.liabilities, 12077.75 + 4080.18 + 634.58 + 2055.30);
-  close(HF.netWorth(S, 'all').liabilities, 12077.75 + 4080.18 + 634.58 + 2055.30 + 25209.75);
-  close(h.assets, 886.94 * 3 + 34119.85 + 2047.49 + 4000);
+t('net worth = every asset − every active debt', () => {
+  const S = HF.seed(), nw = HF.netWorth(S);
+  close(nw.assets, S.assets.reduce((t, a) => t + (Number(a.value) || 0), 0), 'assets');
+  close(nw.liabilities, S.debts.filter(d => d.active !== false && d.balance != null).reduce((t, d) => t + d.balance, 0), 'debts');
+  close(nw.net, nw.assets - nw.liabilities);
 });
 
 t('date & amount parsing', () => {
@@ -215,25 +212,23 @@ t('migrates V1 saves', () => {
   assert.ok(!('categoryId' in m.transactions[0]));
 });
 
-t('net worth subtracts every debt in scope and lists missing balances', () => {
+t('net worth lists debts without a balance; closed debts drop out', () => {
   const S = HF.seed();
-  const debtsIn = scope => S.debts.filter(d => d.active !== false && (scope === 'all' || d.scope !== 'business'));
-  ['household', 'all'].forEach(scope => {
-    const nw = HF.netWorth(S, scope);
-    const withBal = debtsIn(scope).filter(d => d.balance != null);
-    close(nw.liabilities, withBal.reduce((a, d) => a + d.balance, 0), scope);
-    assert.deepStrictEqual(nw.missing.map(d => d.id).sort(), debtsIn(scope).filter(d => d.balance == null).map(d => d.id).sort());
-  });
-  assert.ok(HF.netWorth(S, 'household').missing.some(d => d.name === 'Tesla — Angle Finance'));
+  const active = S.debts.filter(d => d.active !== false);
+  const before = HF.netWorth(S);
+  assert.deepStrictEqual(before.missing.map(d => d.id).sort(), active.filter(d => d.balance == null).map(d => d.id).sort());
   // Setting a balance moves it from missing into liabilities.
-  const before = HF.netWorth(S, 'household');
-  S.debts.find(d => d.id === 'd_tesla').balance = 30000;
-  const after = HF.netWorth(S, 'household');
-  close(before.net - after.net, 30000);
-  assert.strictEqual(after.missing.length, before.missing.length - 1);
-  // Closed debts drop out.
-  S.debts.find(d => d.id === 'd_tesla').active = false;
-  close(HF.netWorth(S, 'household').net, before.net);
+  const gap = before.missing[0];
+  if (gap) {
+    gap.balance = 30000;
+    const after = HF.netWorth(S);
+    close(before.net - after.net, 30000);
+    assert.strictEqual(after.missing.length, before.missing.length - 1);
+  }
+  // Closing a debt removes it.
+  const d = S.debts.find(x => x.active !== false && x.balance != null);
+  const pre = HF.netWorth(S).net; d.active = false;
+  close(HF.netWorth(S).net - pre, d.balance);
 });
 
 t('net worth snapshots: one per day, only on change', () => {

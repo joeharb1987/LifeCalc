@@ -372,8 +372,7 @@
   }
 
   // ---------- Net worth ----------
-  // scope 'household' = household assets − household debts; 'all' adds business / trust assets and debts.
-  // Every active debt in scope is subtracted; debts without a balance are listed so the gap is visible.
+  // Debts without a balance are listed so the gap is visible.
   // Everything is one household: every asset and every active debt counts.
   function netWorth(state) {
     var assets = 0, liabilities = 0, missing = [];
