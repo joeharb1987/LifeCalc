@@ -285,6 +285,15 @@
     var u = U();
     if (st.folder !== (folderId || null)) { st.folder = folderId || null; st.filter = 'all'; st.sel = null; }
     var folder = folderId ? folderById(folderId) : null;
+    var sx = sync() && sync().state();
+    if (sx && sx.householdId && !sx.ready) {
+      // Still connecting (the sign-in library loads in the background), or offline.
+      var off = !navigator.onLine || sx.status === 'unavailable';
+      if (!off) { clearTimeout(st.wait); st.wait = setTimeout(refresh, 800); }
+      return u.top('Files', { back: true }) + '<div data-files-page></div><div class="card">' + (off ?
+        u.empty('folder', 'You’re offline', 'Files are kept online for you and Zhila. Connect to the internet to see them.') :
+        '<div class="pad muted"><i class="fx-spin"></i> Connecting…</div>') + '</div>';
+    }
     if (!ready()) {
       return u.top('Files', { back: true }) + '<div data-files-page></div><div class="card pad"><b>Files need Live sharing</b><p class="muted small">Files are stored privately for your household (you and Zhila), so sign in under Live sharing first.</p>' +
         '<button class="btn accent block" data-act="sync">Open Live sharing</button></div>';

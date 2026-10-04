@@ -1,6 +1,6 @@
 // One service worker for all of LifeCalc (calculator + /budget).
 // Network-first so updates pushed to GitHub Pages show up straight away; the cache is the offline fallback.
-const CACHE_NAME = "lifecalc-v44";
+const CACHE_NAME = "lifecalc-v45";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -38,21 +38,28 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Network-first, but on a weak signal don't wait forever: after a few seconds use the saved copy (if there is one),
+// and keep the network answer for next time.
+const NETWORK_WAIT_MS = 3500;
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || new URL(event.request.url).origin !== location.origin) return;
 
-  event.respondWith(
-    // "no-cache" revalidates with GitHub Pages instead of using its 10-minute browser cache.
-    fetch(event.request, { cache: "no-cache" }).then((response) => {
+  // "no-cache" revalidates with GitHub Pages instead of using its 10-minute browser cache.
+  const network = fetch(event.request, { cache: "no-cache" }).then((response) => {
+    if (response.ok) {
       const copy = response.clone();
       caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-      return response;
-    }).catch(() =>
-      caches.match(event.request, { ignoreSearch: true }).then((cached) => {
-        if (cached) return cached;
-        const inBudget = new URL(event.request.url).pathname.includes("/budget/");
-        return caches.match(inBudget ? "./budget/index.html" : "./index.html");
-      })
-    )
-  );
+    }
+    return response;
+  });
+  const cached = () => caches.match(event.request, { ignoreSearch: true });
+  const fallback = () => cached().then((hit) => {
+    if (hit) return hit;
+    const inBudget = new URL(event.request.url).pathname.includes("/budget/");
+    return caches.match(inBudget ? "./budget/index.html" : "./index.html");
+  });
+  const slow = new Promise((resolve) => setTimeout(resolve, NETWORK_WAIT_MS)).then(cached).then((hit) => hit || network);
+
+  event.respondWith(Promise.race([network, slow]).catch(fallback));
+  event.waitUntil(network.catch(() => {}));
 });
