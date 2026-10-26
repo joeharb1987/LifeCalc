@@ -1,6 +1,7 @@
 // LifeCalc connector for Claude / ChatGPT (Model Context Protocol, streamable HTTP).
-// Read-only for the budget. The only write is save_file_summary, which fills in a Files-vault file's summary
-// (so Claude can read uploads on the user's own subscription, no API key needed). It never changes budget numbers.
+// Mostly read-only. Writes: save_file_summary (a Files-vault file's summary, never budget numbers) and
+// update_debt_balance (only the balance, and optionally the note, of ONE existing debt; optimistic version check
+// so the app's three-way sync merges it like any other phone's save).
 // URL: https://<project>.supabase.co/functions/v1/lifecalc-mcp/<ai_token>
 // The token (Settings → Connect AI in the app) picks the household; without a valid token nothing is returned.
 
@@ -131,7 +132,7 @@ const VIEW = { type: "string", enum: ["weekly", "monthly", "yearly"], descriptio
 const TOOLS = [
   { name: "get_budget_summary", description: "The household budget as readable text: totals (income, expenses, left over), every income and expense line by category with notes, one-offs, debts, assets and net worth. Start here.", inputSchema: { type: "object", properties: { period: VIEW } } },
   { name: "get_items", description: "Budget lines as JSON with amount, frequency, per-period value, category, source, dates and notes.", inputSchema: { type: "object", properties: { direction: { type: "string", enum: ["in", "out"], description: "in = income, out = expenses" }, category: { type: "string", description: "Category name (partial match)" }, include_inactive: { type: "boolean" }, period: VIEW } } },
-  { name: "get_debts", description: "All debts as JSON: balance, interest rate, repayment, frequency, limit, end date, notes, active.", inputSchema: { type: "object", properties: {} } },
+  { name: "get_debts", description: "All debts as JSON: id, balance, interest rate, repayment, frequency, limit, end date, notes, active.", inputSchema: { type: "object", properties: {} } },
   { name: "get_assets", description: "All assets as JSON with category, value and date last updated, plus totals and net worth.", inputSchema: { type: "object", properties: {} } },
   { name: "get_transactions", description: "Imported bank transactions (negative = money out). Filter by date range, category name or text search.", inputSchema: { type: "object", properties: { from: { type: "string", description: "YYYY-MM-DD" }, to: { type: "string", description: "YYYY-MM-DD" }, category: { type: "string" }, search: { type: "string" }, limit: { type: "number", description: "Default 200, max 2000" } } } },
   { name: "list_files", description: "Household files in the LifeCalc Files vault (statements, CSVs, screenshots, bills, payslips), newest as-at date first, with each file's AI summary and any ai_note (a difference between the file and the app's figures). Filter by folder, type, as-at date range, or linked budget line/asset.", inputSchema: { type: "object", properties: { folder: { type: "string", description: "The household's own folder name (or part of it), e.g. \"Bank statements\"; \"none\" for files not in a folder" }, type: { type: "string", enum: ["statement", "investment", "bill", "payslip", "other"] }, from: { type: "string", description: "YYYY-MM-DD (as-at date from)" }, to: { type: "string", description: "YYYY-MM-DD (as-at date to)" }, linked_to: { type: "string", description: "Budget line or asset: its id or part of its name" } } } },
@@ -142,6 +143,10 @@ const TOOLS = [
     as_at_date: { type: "string", description: "YYYY-MM-DD: statement end date, valuation date, bill issue date or pay date" },
     extracted_text: { type: "string", description: "Optional: key figures and transactions, one per line" },
     folder: { type: "string", description: "Optional: name of one of the household's folders (see get_budget_summary) to file it in" } }, required: ["id", "summary"] } },
+  { name: "update_debt_balance", description: "Change the balance owing of ONE existing debt (and optionally its note). Nothing else in the budget is changed. Identify the debt by id or exact name (see get_debts). Use dry_run: true to preview without saving.", inputSchema: { type: "object", properties: {
+    debt_id: { type: "string", description: "Debt id from get_debts" }, name: { type: "string", description: "Exact debt name (if no debt_id)" },
+    balance: { type: "number", description: "New balance owing in AUD (>= 0)" }, note: { type: "string", description: "Optional: replace the debt's note" },
+    dry_run: { type: "boolean", description: "Preview only, save nothing" } }, required: ["balance"] } },
   { name: "get_monthly_spending", description: "Actual bank spending by category for each month (excludes internal transfers, cash deposits and investments), plus money in.", inputSchema: { type: "object", properties: { months: { type: "number", description: "How many recent months (default 6)" } } } },
 ];
 
@@ -159,7 +164,7 @@ function callTool(name: string, a: Any, S: Any, hname: string): string {
         start: i.startDate || undefined, end: i.endDate || undefined, needs_review: i.review || undefined, notes: i.notes || undefined }));
     return JSON.stringify(rows, null, 1);
   }
-  if (name === "get_debts") return JSON.stringify(byOrder(S.debts || []).map((d: Any) => ({ name: d.name, balance: d.balance ?? null, rate_pct: d.rate ?? null, repayment: d.payment ?? null, frequency: d.frequency, limit: d.limit || null, end: d.endDate || null, active: d.active !== false, notes: d.notes || undefined })), null, 1);
+  if (name === "get_debts") return JSON.stringify(byOrder(S.debts || []).map((d: Any) => ({ id: d.id, name: d.name, balance: d.balance ?? null, rate_pct: d.rate ?? null, repayment: d.payment ?? null, frequency: d.frequency, limit: d.limit || null, end: d.endDate || null, active: d.active !== false, notes: d.notes || undefined })), null, 1);
   if (name === "get_assets") {
     const cats = Object.fromEntries((S.assetCats || []).map((c: Any) => [c.id, c.name]));
     return JSON.stringify({ assets: (S.assets || []).map((x: Any) => ({ name: x.name, category: cats[x.type] || x.type, value: Number(x.value) || 0, updated: x.updated || null, notes: x.notes || undefined })), totals: Object.fromEntries(Object.entries(netWorth(S)).map(([k, v]) => [k, typeof v === "number" ? Math.round(v * 100) / 100 : v])) }, null, 1);
@@ -320,10 +325,38 @@ async function fileTool(name: string, a: Any, h: Any): Promise<string | Any[]> {
   throw new Error("Unknown tool: " + name);
 }
 
+// ---------- Debt balance write ----------
+async function updateDebtBalance(a: Any, h: Any): Promise<string> {
+  const bal = typeof a.balance === "number" ? a.balance : NaN;
+  if (!Number.isFinite(bal) || bal < 0 || bal > 1e9) throw new Error("balance must be a finite number >= 0.");
+  const newBal = Math.round(bal * 100) / 100;
+  if (a.note !== undefined && typeof a.note !== "string") throw new Error("note must be text.");
+  const S = h.data || {}, debts: Any[] = Array.isArray(S.debts) ? S.debts : [];
+  const hits = a.debt_id ? debts.filter((d) => d && d.id === String(a.debt_id)) : a.name ? debts.filter((d) => d && d.name === String(a.name)) : [];
+  if (!a.debt_id && !a.name) throw new Error("Give debt_id or the exact debt name (see get_debts).");
+  if (hits.length !== 1) throw new Error(hits.length ? "More than one debt has that name; use debt_id." : "No such debt. Debts: " + debts.map((d) => `${d.name} (${d.id})`).join(", "));
+  const d = hits[0], oldBal = d.balance ?? null, note = a.note === undefined ? undefined : String(a.note).trim().slice(0, 1000);
+  const log = (result: string) => console.log(JSON.stringify({ evt: "update_debt_balance", household: h.id, debt: d.id, version: h.version, old: oldBal, new: newBal, note_changed: note !== undefined && note !== (d.notes || ""), dry_run: !!a.dry_run, result }));
+  const preview = `${d.name}: balance ${oldBal == null ? "not set" : money(Number(oldBal), 2)} → ${money(newBal, 2)}` + (note !== undefined ? `; note → "${note}"` : "");
+  if (a.dry_run) { log("dry_run"); return `Dry run, nothing saved. Would change ${preview}.`; }
+  const data = structuredClone(S), rec = data.debts.find((x: Any) => x && x.id === d.id);
+  rec.balance = newBal;
+  if (note !== undefined) rec.notes = note;
+  const r = await fetch(`${SB_URL}/rest/v1/households?id=eq.${h.id}&version=eq.${h.version}`, {
+    method: "PATCH", headers: { ...svcHeaders(), "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify({ data, version: h.version + 1, updated_at: new Date().toISOString() }),
+  });
+  if (!r.ok) { log("error " + r.status); throw new Error(`Couldn't save (${r.status}). Nothing changed.`); }
+  const rows = await r.json();
+  if (!rows.length) { log("conflict"); throw new Error("Conflict: the budget was just changed on a phone. Nothing saved; try again."); }
+  log("saved v" + rows[0].version);
+  return `Saved. ${preview}. Nothing else changed; phones pick it up on their next sync.`;
+}
+
 // ---------- MCP over HTTP ----------
 async function loadHousehold(token: string) {
   if (!/^[a-f0-9]{64}$/.test(token)) return null;
-  const r = await fetch(`${SB_URL}/rest/v1/households?ai_token=eq.${token}&select=id,name,data`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
+  const r = await fetch(`${SB_URL}/rest/v1/households?ai_token=eq.${token}&select=id,name,version,data`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
   if (!r.ok) return null;
   const rows = await r.json();
   return rows[0] || null;
@@ -337,8 +370,8 @@ async function handle(msg: Any, token: string) {
     return reply(id, {
       protocolVersion: params.protocolVersion || "2025-03-26",
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "lifecalc", title: "LifeCalc Budget", version: "1.2.0" },
-      instructions: "Read-only access to the user's household budget in LifeCalc (amounts in AUD). Call get_budget_summary first, then the other tools for detail. Uploaded statements, bills, payslips and screenshots are in the Files vault (list_files / get_file / read_file). If files haven't been read yet, read each one with read_file and save a short summary with save_file_summary (it only fills in the file's summary, never budget numbers). Give practical, specific advice using the actual figures.",
+      serverInfo: { name: "lifecalc", title: "LifeCalc Budget", version: "1.3.0" },
+      instructions: "Access to the user's household budget in LifeCalc (amounts in AUD). Call get_budget_summary first, then the other tools for detail. Uploaded statements, bills, payslips and screenshots are in the Files vault (list_files / get_file / read_file). If files haven't been read yet, read each one with read_file and save a short summary with save_file_summary (it only fills in the file's summary, never budget numbers). The only budget change you can make is update_debt_balance (one debt's balance, optionally its note) — only when the user asks. Give practical, specific advice using the actual figures.",
     });
   }
   if (method === "ping") return reply(id, {});
@@ -348,6 +381,7 @@ async function handle(msg: Any, token: string) {
     if (!h) return reply(id, { content: [{ type: "text", text: "This LifeCalc link is no longer valid. Create a new one in LifeCalc → Settings → Connect AI." }], isError: true });
     try {
       const args = params.arguments || {};
+      if (params.name === "update_debt_balance") return reply(id, { content: [{ type: "text", text: await updateDebtBalance(args, h) }] });
       if (["list_files", "get_file", "read_file", "save_file_summary"].includes(params.name)) {
         const out = await fileTool(params.name, args, h);
         return reply(id, { content: typeof out === "string" ? [{ type: "text", text: out }] : out });
