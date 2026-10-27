@@ -55,7 +55,7 @@ button { cursor: pointer; }
 
 .app {
   max-width: 560px; margin: 0 auto; min-height: 100dvh;
-  padding: calc(env(safe-area-inset-top) + 14px) 16px calc(var(--nav-h) + env(safe-area-inset-bottom) + 28px);
+  padding: calc(var(--lc-sat, env(safe-area-inset-top)) + 14px) 16px calc(var(--nav-h) + var(--lc-sab, env(safe-area-inset-bottom)) + 28px);
 }
 
 /* ---------- Headers ---------- */
@@ -202,14 +202,14 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; margin: 0 auto; max-width: 560px; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain;
   background: var(--bg); border-radius: 24px 24px 0 0; z-index: 41; transform: translateY(100%); transition: transform .26s cubic-bezier(.2,.8,.2,1);
-  padding: 8px 16px calc(env(safe-area-inset-bottom) + 20px);
+  padding: 8px 16px calc(var(--lc-sab, env(safe-area-inset-bottom)) + 20px);
 }
 .sheet.show { transform: translateY(0); }
 .sheet .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 4px auto 10px; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; position: sticky; top: -8px; background: inherit; padding: 6px 0; z-index: 2; }
 .sheet-head h3 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
-.sheet.full { top: 0; max-height: none; border-radius: 0; padding-top: calc(env(safe-area-inset-top) + 6px); }
-.form-bar { display: flex; align-items: center; justify-content: space-between; position: sticky; top: calc(-1 * env(safe-area-inset-top) - 6px); background: var(--bg); padding: 8px 0; z-index: 2; }
+.sheet.full { top: 0; max-height: none; border-radius: 0; padding-top: calc(var(--lc-sat, env(safe-area-inset-top)) + 6px); }
+.form-bar { display: flex; align-items: center; justify-content: space-between; position: sticky; top: calc(-1 * var(--lc-sat, env(safe-area-inset-top)) - 6px); background: var(--bg); padding: 8px 0; z-index: 2; }
 .form-bar .cancel { border: 0; background: none; color: var(--ink-2); font-weight: 600; padding: 8px 0; font-size: 15px; }
 .form-bar .save { border: 0; background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; padding: 8px 18px; border-radius: 999px; font-size: 15px; }
 .form-title { font-size: 26px; font-weight: 700; letter-spacing: -.025em; margin: 8px 2px 16px; }
@@ -278,13 +278,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .profile b { font-size: 17px; display: block; }
 
 /* ---------- Bottom nav ---------- */
-.nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+.nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid var(--line); padding-bottom: var(--lc-sab, env(safe-area-inset-bottom)); }
 .nav-inner { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); height: var(--nav-h); }
 .nav button, .nav a { text-decoration: none; border: 0; background: transparent; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 600; }
 .nav button.on { color: var(--accent-ink); }
 .nav a { color: var(--muted); }
 
-.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); transform: translate(-50%, 10px); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 600; opacity: 0; pointer-events: none; transition: .2s; z-index: 60; max-width: calc(100% - 32px); text-align: center; }
+.toast { position: fixed; left: 50%; bottom: calc(var(--lc-sab, env(safe-area-inset-bottom)) + 20px); transform: translate(-50%, 10px); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 600; opacity: 0; pointer-events: none; transition: .2s; z-index: 60; max-width: calc(100% - 32px); text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mt8 { margin-top: 8px; } .mt12 { margin-top: 12px; } .mt16 { margin-top: 16px; }
@@ -313,7 +313,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .dragging .grip { cursor: grabbing; }
 
 /* Keep scrolled content from showing under the iPhone status bar */
-body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--bg); z-index: 50; pointer-events: none; }
+body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--lc-sat, env(safe-area-inset-top)); background: var(--bg); z-index: 50; pointer-events: none; }
 
 /* Net worth calculation total */
 .nw-total { background: var(--sunken); }
@@ -517,9 +517,14 @@ label.icon-btn { cursor: pointer; }
 .fx-row.fx-on { background: var(--accent-soft); }
 .fx-move .ico { width: 36px; height: 36px; }
 .fx-move.fx-on { color: var(--accent-ink); }
-.fx-selbar { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 12px); z-index: 30; padding: 0 16px; pointer-events: none; }
+.fx-selbar { position: fixed; left: 0; right: 0; bottom: calc(var(--lc-sab, env(safe-area-inset-bottom)) + 12px); z-index: 30; padding: 0 16px; pointer-events: none; }
 .fx-selbar-in { max-width: 520px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 16px; background: var(--card); border-radius: 18px; box-shadow: 0 8px 30px rgba(22, 35, 58, .22); pointer-events: auto; }
 .fx-selbar-in b { flex: 1; font-size: 14px; font-weight: 600; }
 .fx-selbar .btn { flex: 0 0 auto; min-height: 38px; padding: 0 14px; gap: 6px; }
 .fx-selbar .btn[disabled] { opacity: .45; }
 [data-files-page].fx-selecting ~ .list { margin-bottom: 80px; }
+
+/* Page changes between the calculator and Budget: keep the current screen up until the next one has drawn, with a short cross-fade (no white flash). */
+@view-transition { navigation: auto; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .16s; }
+@media (prefers-reduced-motion: reduce) { ::view-transition-old(root), ::view-transition-new(root) { animation: none; } }

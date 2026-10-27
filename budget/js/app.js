@@ -1355,6 +1355,9 @@
       render(); return true;
     },
     render: function () { render(); },
+    // For the page carousel: draw a main tab without switching to it, then switch with no extra animation.
+    tabHTML: function (tab) { return { hq: function () { return HF.hq.render(); }, budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab](); },
+    showTab: function (tab) { if (TABS.indexOf(tab) < 0) return; ui.page = null; closeSheet(true); S.settings.tab = tab; persist(); render(); window.scrollTo(0, 0); },
     // Shared UI helpers for files.js
     ui: { top: top, esc: esc, toast: toast, openSheet: openSheet, closeSheet: function () { closeSheet(); }, empty: emptyBlock },
     // Swipe right on a sub-page goes back one step (used by nav-swipe.js).
