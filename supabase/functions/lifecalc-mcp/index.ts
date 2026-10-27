@@ -4,6 +4,8 @@
 // URL: https://<project>.supabase.co/functions/v1/lifecalc-mcp/<ai_token>
 // The token (Settings → Connect AI in the app) picks the household; without a valid token nothing is returned.
 
+import { HQ_TOOLS, HQ_TOOL_NAMES, hqTool, restStore } from "./hq.ts";
+
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MAX_READ = 150_000;   // characters of file text returned by read_file
@@ -123,6 +125,7 @@ function summaryText(S: Any, view: string, name: string) {
   out.push("", "## Net worth", `- Assets ${money(nw.assets)} − debts ${money(nw.debts)} = ${money(nw.net)}` +
     (nw.missing.length ? ` (no balance yet for: ${nw.missing.join(", ")})` : ""));
   out.push("", `Bank transactions available: ${(S.transactions || []).length}. Use get_transactions or get_monthly_spending for actual spending.`);
+  if ((S.hqLocations || []).length) out.push(`Ariel's HQ café locations: ${S.hqLocations.length}. Use get_hq_overview, get_hq_location and get_hq_deadlines.`);
   return out.join("\n");
 }
 
@@ -338,16 +341,20 @@ async function handle(msg: Any, token: string) {
       protocolVersion: params.protocolVersion || "2025-03-26",
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: "lifecalc", title: "LifeCalc Budget", version: "1.2.0" },
-      instructions: "Read-only access to the user's household budget in LifeCalc (amounts in AUD). Call get_budget_summary first, then the other tools for detail. Uploaded statements, bills, payslips and screenshots are in the Files vault (list_files / get_file / read_file). If files haven't been read yet, read each one with read_file and save a short summary with save_file_summary (it only fills in the file's summary, never budget numbers). Give practical, specific advice using the actual figures.",
+      instructions: "Read-only access to the user's household budget in LifeCalc (amounts in AUD). Call get_budget_summary first, then the other tools for detail. Uploaded statements, bills, payslips and screenshots are in the Files vault (list_files / get_file / read_file). If files haven't been read yet, read each one with read_file and save a short summary with save_file_summary (it only fills in the file's summary, never budget numbers). Ariel's HQ café group data: get_hq_overview / get_hq_location / get_hq_deadlines; HQ write tools change only HQ records and only when the user asks. Give practical, specific advice using the actual figures.",
     });
   }
   if (method === "ping") return reply(id, {});
-  if (method === "tools/list") return reply(id, { tools: TOOLS });
+  if (method === "tools/list") return reply(id, { tools: [...TOOLS, ...HQ_TOOLS] });
   if (method === "tools/call") {
     const h = await loadHousehold(token);
     if (!h) return reply(id, { content: [{ type: "text", text: "This LifeCalc link is no longer valid. Create a new one in LifeCalc → Settings → Connect AI." }], isError: true });
     try {
       const args = params.arguments || {};
+      // Ariel's HQ (hq.ts): reads use the loaded data; writes re-read and change only data.hqLocations.
+      if (HQ_TOOL_NAMES.includes(params.name)) {
+        return reply(id, { content: [{ type: "text", text: await hqTool(params.name, args, h.data || {}, restStore(SB_URL, svcHeaders(), h.id)) }] });
+      }
       if (["list_files", "get_file", "read_file", "save_file_summary"].includes(params.name)) {
         const out = await fileTool(params.name, args, h);
         return reply(id, { content: typeof out === "string" ? [{ type: "text", text: out }] : out });
