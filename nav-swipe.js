@@ -16,12 +16,14 @@
   var GLIDE = 'cubic-bezier(.22,.9,.32,1)';                     // fast start, long soft landing
   var REDUCE = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   var s = null, peek = null, frame = null, ready = false, busy = false, ghost = null, dots = null, dotsTimer = null;
+  var inflight = null, leaving = false, lastG = null;       // the glide in progress (a new touch finishes it at once); leaving = page is changing
   window.__lcNavSwipe = false;
 
   function app() { return document.querySelector('.app'); }
   function W() { return window.innerWidth; }
   function B() { return window.LCBudget; }
   function tab() { return inBudget && B() ? B().get().settings.tab : 'calc'; }
+  function now() { return window.performance && performance.now ? performance.now() : Date.now(); }
   function bg() { return getComputedStyle(document.body).backgroundColor; }
 
   // Where a swipe can go from here. dir -1 = finger moves left (next page), +1 = finger moves right (previous).
@@ -148,14 +150,15 @@
   // ---------- Gesture ----------
   document.addEventListener('touchstart', function (e) {
     window.__lcNavSwipe = false;
+    if (busy && inflight && !leaving) inflight();          // touching mid-glide: land it now and start fresh
     if (busy || e.touches.length !== 1 || (e.target.closest && e.target.closest(IGNORE))) { s = null; return; }
     var t = e.touches[0];
-    s = { x: t.clientX, y: t.clientY, on: false, row: !!(e.target.closest && e.target.closest('.swipe')), hist: [{ x: t.clientX, t: e.timeStamp || Date.now() }] };
+    s = { x: t.clientX, y: t.clientY, x0: t.clientX, t0: now(), on: false, row: !!(e.target.closest && e.target.closest('.swipe')), hist: [{ x: t.clientX, t: now() }] };
   }, { passive: true });
 
   document.addEventListener('touchmove', function (e) {
     if (!s) return;
-    var t = e.touches[0], dx = t.clientX - s.x, dy = t.clientY - s.y, now = e.timeStamp || Date.now();
+    var t = e.touches[0], dx = t.clientX - s.x, dy = t.clientY - s.y, at = now();
     if (!s.on) {
       if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { s = null; return; }      // scrolling
       if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
@@ -171,7 +174,7 @@
       lift(true);
     }
     e.preventDefault();
-    s.hist.push({ x: t.clientX, t: now }); if (s.hist.length > 6) s.hist.shift();
+    s.hist.push({ x: t.clientX, t: at }); if (s.hist.length > 6) s.hist.shift();
     dx = t.clientX - s.x;
     if (s.r && s.live) {
       var x = s.dir < 0 ? Math.max(-W(), Math.min(0, dx)) : Math.max(0, Math.min(W(), dx));
@@ -189,7 +192,8 @@
   }
   function settle(el, ms, done) {
     var fired = false;
-    function fin() { if (fired) return; fired = true; el.removeEventListener('transitionend', onEnd); done(); }
+    function fin() { if (fired) return; fired = true; inflight = null; el.removeEventListener('transitionend', onEnd); done(); }
+    inflight = function () { var o = other(lastG || {}); el.style.transition = 'none'; if (o) o.style.transition = 'none'; fin(); };
     function onEnd(ev) { if (ev.target === el && ev.propertyName === 'transform') fin(); }
     el.addEventListener('transitionend', onEnd);
     setTimeout(fin, ms + 80);
@@ -197,12 +201,13 @@
 
   function end(e, cancelled) {
     if (!s) return;
-    var g = s; s = null;
+    var g = s; s = null; lastG = g;
     setTimeout(function () { window.__lcNavSwipe = false; }, 0);
     if (!g.on) return;
     var t = e.changedTouches && e.changedTouches[0];
     var dist = t ? (t.clientX - g.x) * g.dir : 0, v = velocity(g), w = W();
-    var go = !cancelled && g.r && (dist + v * 160 > w * 0.4 || (dist > 24 && v > 0.35)) && v > -0.2;
+    var whole = t ? (t.clientX - g.x0) * g.dir : 0, quick = now() - g.t0 < 300 && whole > 36;   // a short, fast flick always counts
+    var go = !cancelled && g.r && (dist + v * 160 > w * 0.4 || (dist > 24 && v > 0.35) || quick) && v > -0.2;
     busy = true;
 
     if (!g.r || !g.live) {        // rubber-band or sub-page back: spring home, then act
@@ -222,6 +227,7 @@
     var finish = function () {
       if (!go) { lift(false); busy = false; hideDots(250); return; }
       if (g.r.kind === 'doc') {
+        leaving = true;
         try { sessionStorage.setItem('lc_slide', 'peek'); } catch (err) {}
         location.href = DOC_TARGET;
         return;
@@ -240,6 +246,7 @@
   // Before the preview has loaded: slide out, then open the page.
   function fallback() {
     var d = inBudget ? 1 : -1;
+    leaving = true; busy = true;
     try { sessionStorage.setItem('lc_slide', inBudget ? 'right' : 'left'); } catch (err) {}
     var b = document.body;
     b.style.transition = 'transform .2s ease-in, opacity .2s ease-in';
@@ -265,7 +272,11 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrive); else arrive();
   window.addEventListener('pageshow', function (e) {
-    if (e.persisted) { document.body.style.transform = ''; document.body.style.opacity = ''; lift(false); busy = false; s = null; }
+    if (e.persisted) { document.body.style.transform = ''; document.body.style.opacity = ''; lift(false); busy = false; leaving = false; inflight = null; s = null; }
   });
   window.addEventListener('resize', function () { if (frame && ready) shareInsets(); });
+  // The page-change cross-fade is a nicety: if the browser skips it (e.g. the toolbar resizes), carry on quietly.
+  function quiet(e) { var vt = e.viewTransition; if (vt) { vt.ready.catch(function () {}); vt.finished.catch(function () {}); vt.updateCallbackDone && vt.updateCallbackDone.catch(function () {}); } }
+  window.addEventListener('pagereveal', quiet);
+  window.addEventListener('pageswap', quiet);
 })();
