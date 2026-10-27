@@ -81,3 +81,19 @@ Budget → Files. Private household finance files (statements, payslips, bills, 
 - Folders: `public.file_folders` (migration `20261004_file_folders.sql`), the household's own folders, one level. `files.folder_id` (a trigger keeps it in the same household; deleting a folder leaves its files unfiled). Upload inside a folder files them there; uploads from the Files root are filed by the AI into a matching folder. Select mode moves or deletes several files at once.
 - No API key? Claude can read them through the connector instead: `read_file` returns the file (PDF text via unpdf, CSV/text, or the image) with account numbers masked, and `save_file_summary` writes the summary/type/date/folder back (only that file's row; never budget numbers). Ask Claude “Summarise my LifeCalc files”.
 - Secret: `ANTHROPIC_API_KEY` in Supabase → Edge Functions → Secrets (server only). Without it, uploads show "Waiting for AI"; they're retried automatically the next time Files is opened (or tap Try again / Retry all).
+
+## Ariel’s HQ
+
+Open `budget/#hq`, choose **Ariel’s HQ** in either app menu, or swipe left from the Budget page background. Swipe right from HQ to return. Existing row swipe-to-delete gestures keep priority. The new page reuses Budget themes and forms; household budget calculations do not include HQ records.
+
+- `js/hq/core.js`: independently testable estimates, fee schedules, GST, occupancy ratios, lease deadlines and validation.
+- `js/hq/app.js` and `hq.css`: isolated HQ overview, location details and forms.
+- `hqLocations`: optional array in the existing household JSON. Local saves, backups and record-level sync merges include it. No database migration, new key or seeded business figures.
+- Each location stores dated `sales`, dated `fees` (fixed or percentage), non-overlapping `discounts`, itemised `costs`, `lease.options`, contact details, document links and notes.
+- Current estimates use Sydney's date and the existing 52-week / 12-month conversions. Monthly/yearly figures are annualised current estimates, not historical revenue or a date-weighted cash-flow forecast. Fee history is retained when adding a scheduled change.
+- Group sales show GST-inclusive estimates; HQ revenue excludes GST. Percentage fee sales basis and fee GST treatment are separate. Occupancy ratios compare costs and sales excluding GST; missing or zero sales produce no ratio. Marking charges included in rent avoids double counting.
+- Opening locations are excluded unless the forecast checkbox is selected. Closed and archived locations do not contribute. No personal Budget income is automatically changed.
+- Documents can be linked from a café; file uploads use the existing household Files vault. No per-café attachment database is introduced.
+- Options never automatically extend the lease; confirm the dates after renewal. Countdowns update on return to the app and every minute while viewing HQ.
+
+Run `node budget/tests/hq.test.js` for financial edge cases and the actual sync merger. Run the existing `node budget/tests/core.test.js` for Budget regression coverage.

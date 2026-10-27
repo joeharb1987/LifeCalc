@@ -9,7 +9,7 @@
   var APP_URL = 'https://joeharb1987.github.io/LifeCalc/budget/';
   // Settings that stay per phone (each person's name, view, theme, open tab).
   var LOCAL_ONLY = ['tab', 'theme', 'view', 'userName', 'expView', 'mode'];
-  var COLLECTIONS = ['categories', 'items', 'accounts', 'transactions', 'rules', 'debts', 'assets', 'assetCats'];
+  var COLLECTIONS = ['categories', 'items', 'accounts', 'transactions', 'rules', 'debts', 'assets', 'assetCats', 'hqLocations'];
 
   var sb = null, session = null, channel = null, timer = null, applying = false, pending = false;
   var status = 'off', lastSync = null, st = read(LKEY) || {};

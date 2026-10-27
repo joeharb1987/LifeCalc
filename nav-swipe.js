@@ -58,6 +58,7 @@
   // ---------- Gesture ----------
   document.addEventListener('touchstart', function (e) {
     window.__lcNavSwipe = false;
+    if (inBudget && window.LCBudget && window.LCBudget.get().settings.tab === 'hq') { s = null; return; }
     if (busy || e.touches.length !== 1 || (e.target.closest && e.target.closest(IGNORE))) { s = null; return; }
     var t = e.touches[0];
     // On a Budget sub-page, swiping right goes back a step instead of to the calculator.
