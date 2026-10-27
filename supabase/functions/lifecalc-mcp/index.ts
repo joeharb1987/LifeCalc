@@ -1,8 +1,12 @@
 // LifeCalc connector for Claude / ChatGPT (Model Context Protocol, streamable HTTP).
-// Read-only for the budget. The only write is save_file_summary, which fills in a Files-vault file's summary
-// (so Claude can read uploads on the user's own subscription, no API key needed). It never changes budget numbers.
+// Mostly read-only. Writes: save_file_summary (a Files-vault file's summary, never budget numbers) and
+// narrow budget writes (update_/add_/delete_ for items, debts, assets; update_/add_ for categories and asset
+// categories; update_debt_balance). One record per call, optimistic version check, so the app's three-way sync
+// merges it like any other phone's save. Deletes need confirm: true. Every write supports dry_run.
 // URL: https://<project>.supabase.co/functions/v1/lifecalc-mcp/<ai_token>
 // The token (Settings → Connect AI in the app) picks the household; without a valid token nothing is returned.
+
+import { HQ_TOOLS, HQ_TOOL_NAMES, hqTool, restStore } from "./hq.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -123,15 +127,172 @@ function summaryText(S: Any, view: string, name: string) {
   out.push("", "## Net worth", `- Assets ${money(nw.assets)} − debts ${money(nw.debts)} = ${money(nw.net)}` +
     (nw.missing.length ? ` (no balance yet for: ${nw.missing.join(", ")})` : ""));
   out.push("", `Bank transactions available: ${(S.transactions || []).length}. Use get_transactions or get_monthly_spending for actual spending.`);
+  if ((S.hqLocations || []).length) out.push(`Ariel's HQ café locations: ${S.hqLocations.length}. Use get_hq_overview, get_hq_location and get_hq_deadlines.`);
   return out.join("\n");
 }
 
+// ---------- Budget writes (mirror budget/js/app.js forms; one record per call) ----------
+const FREQS = ["weekly", "fortnightly", "monthly", "quarterly", "term", "yearly", "everyX", "oneoff"];
+const CAT_TYPES = ["living", "debt", "tax", "savings", "business", "oneoff", "income", "transfer", "investment"];
+const ITEM_SOURCES = ["statement", "statement_avg", "cash", "manual", "assumption", "calculated"];
+const uid = (p: string) => p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const sydToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(new Date());
+const r2 = (n: number) => Math.round(n * 100) / 100;
+function vNum(v: unknown, f: string, opt = false) {
+  if (opt && (v === null || v === "")) return null;
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1e9) throw new Error(`${f} must be a finite number >= 0${opt ? " (or null)" : ""}.`);
+  return r2(v);
+}
+function vDate(v: unknown, f: string) {
+  if (v === null || v === "") return null;
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v))) throw new Error(`${f} must be YYYY-MM-DD or null.`);
+  return v;
+}
+function vText(v: unknown, f: string, max: number) { if (typeof v !== "string") throw new Error(`${f} must be text.`); return v.trim().slice(0, max); }
+function vBool(v: unknown, f: string) { if (typeof v !== "boolean") throw new Error(`${f} must be true or false.`); return v; }
+function vEnum(v: unknown, f: string, list: string[]) { if (!list.includes(v as string)) throw new Error(`${f} must be one of: ${list.join(", ")}.`); return v as string; }
+function findOne(list: Any[], a: Any, what: string) {
+  const key = a.id ?? a.debt_id;
+  if (key == null && a.name == null) throw new Error(`Give the ${what}'s id or exact name.`);
+  const hits = key != null ? list.filter((x) => x && x.id === String(key)) : list.filter((x) => x && x.name === String(a.name));
+  if (hits.length !== 1) throw new Error(hits.length ? `More than one ${what} has that name; use its id.` : `No such ${what}. Options: ` + list.map((x) => `${x.name} (${x.id})`).join(", "));
+  return hits[0];
+}
+function nwSnapshot(S: Any) {   // same as HF.recordNetWorth, run by the app on every save
+  const n = netWorth(S).net, date = sydToday(), snap = { date, household: n, all: n };
+  const h = S.nwHistory || (S.nwHistory = []), last = h[h.length - 1];
+  if (last && last.date === date) h[h.length - 1] = snap; else if (!last || last.household !== n || last.all !== n) h.push(snap);
+}
+
+// Field rules per record type. Each returns the cleaned value or throws.
+const ITEM_FIELDS: Record<string, (v: unknown, S: Any) => unknown> = {
+  name: (v) => vText(v, "name", 200) || "Untitled", direction: (v) => vEnum(v, "direction", ["in", "out"]),
+  amount: (v) => vNum(v, "amount"), frequency: (v) => vEnum(v, "frequency", FREQS), customWeeks: (v) => vNum(v, "customWeeks", true),
+  categoryId: (v, S) => { if (!catOf(S, v as string)) throw new Error("categoryId must be one of: " + (S.categories || []).map((c: Any) => `${c.name} (${c.id})`).join(", ")); return v; },
+  source: (v) => vEnum(v, "source", ITEM_SOURCES), kind: (v) => vEnum(v, "kind", ["fixed", "variable", "oneoff"]),
+  active: (v) => vBool(v, "active"), review: (v) => vBool(v, "review"), provider: (v) => vText(v, "provider", 200), notes: (v) => vText(v, "notes", 2000),
+  startDate: (v) => vDate(v, "startDate"), endDate: (v) => vDate(v, "endDate"),
+};
+const DEBT_FIELDS: Record<string, (v: unknown, S: Any) => unknown> = {
+  name: (v) => vText(v, "name", 200) || "Debt", balance: (v) => vNum(v, "balance", true), limit: (v) => vNum(v, "limit", true), rate: (v) => vNum(v, "rate", true),
+  payment: (v) => vNum(v, "payment"), frequency: (v) => vEnum(v, "frequency", FREQS), endDate: (v) => vDate(v, "endDate"), active: (v) => vBool(v, "active"), notes: (v) => vText(v, "notes", 2000),
+};
+const ASSET_FIELDS: Record<string, (v: unknown, S: Any) => unknown> = {
+  name: (v) => vText(v, "name", 200) || "Asset", value: (v) => vNum(v, "value"), updated: (v) => vDate(v, "updated"), notes: (v) => vText(v, "notes", 2000),
+  type: (v, S) => { if (!(S.assetCats || []).some((c: Any) => c.id === v)) throw new Error("type must be an asset category id: " + (S.assetCats || []).map((c: Any) => `${c.name} (${c.id})`).join(", ")); return v; },
+};
+const CAT_FIELDS: Record<string, (v: unknown, S: Any) => unknown> = { name: (v) => vText(v, "name", 100) || "Category", icon: (v) => vText(v, "icon", 40) || "tag", type: (v) => vEnum(v, "type", CAT_TYPES) };
+const ACAT_FIELDS: Record<string, (v: unknown, S: Any) => unknown> = { name: (v) => vText(v, "name", 100) || "Category", icon: (v) => vText(v, "icon", 40) || "tag" };
+
+type Spec = { coll: string; what: string; fields: Record<string, (v: unknown, S: Any) => unknown>; prefix: string; defaults: (S: Any) => Any; fix?: (rec: Any, changed: Set<string>) => void };
+function fixItem(it: Any, ch: Set<string>) {
+  if (it.direction === "in") it.categoryId = "c_income";
+  if (it.frequency !== "everyX") it.customWeeks = null;
+  if (ch.has("kind") && it.kind === "oneoff") it.frequency = "oneoff";
+  if (it.frequency === "oneoff") it.kind = "oneoff";
+  else if (it.kind === "oneoff") it.kind = "fixed";
+  if (it.frequency === "everyX" && !(Number(it.customWeeks) > 0)) throw new Error("frequency everyX needs customWeeks > 0.");
+  if (it.startDate && it.endDate && it.endDate < it.startDate) throw new Error("endDate is before startDate.");
+}
+const SPECS: Record<string, Spec> = {
+  item: { coll: "items", what: "budget line", fields: ITEM_FIELDS, prefix: "i", fix: fixItem,
+    defaults: () => ({ direction: "out", name: "", categoryId: "c_housing", amount: 0, frequency: "weekly", customWeeks: null, source: "manual", kind: "fixed", active: true, scope: "personal", review: false, provider: "", notes: "", startDate: null, endDate: null }) },
+  debt: { coll: "debts", what: "debt", fields: DEBT_FIELDS, prefix: "d",
+    defaults: () => ({ name: "", balance: null, limit: null, rate: null, payment: 0, frequency: "monthly", scope: "personal", endDate: null, active: true, notes: "" }) },
+  asset: { coll: "assets", what: "asset", fields: ASSET_FIELDS, prefix: "as",
+    fix: (a, ch) => { if (ch.has("value") && !ch.has("updated")) a.updated = sydToday(); },
+    defaults: () => ({ name: "", type: "other", value: 0, scope: "household", updated: sydToday(), notes: "" }) },
+  category: { coll: "categories", what: "category", fields: CAT_FIELDS, prefix: "c", defaults: (S) => ({ order: (S.categories || []).length, name: "", icon: "tag", type: "living" }) },
+  asset_category: { coll: "assetCats", what: "asset category", fields: ACAT_FIELDS, prefix: "ac", defaults: (S) => ({ name: "", icon: "tag", order: (S.assetCats || []).length }) },
+};
+
+async function saveHousehold(h: Any, data: Any, logBase: Any) {
+  nwSnapshot(data);
+  const r = await fetch(`${SB_URL}/rest/v1/households?id=eq.${h.id}&version=eq.${h.version}`, {
+    method: "PATCH", headers: { ...svcHeaders(), "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify({ data, version: h.version + 1, updated_at: new Date().toISOString() }),
+  });
+  const log = (result: string) => console.log(JSON.stringify({ ...logBase, household: h.id, version: h.version, result }));
+  if (!r.ok) { log("error " + r.status); throw new Error(`Couldn't save (${r.status}). Nothing changed.`); }
+  const rows = await r.json();
+  if (!rows.length) { log("conflict"); throw new Error("Conflict: the budget was just changed on a phone. Nothing saved; try again."); }
+  log("saved v" + rows[0].version);
+}
+const show = (v: unknown) => v === null || v === undefined || v === "" ? "—" : typeof v === "string" ? `"${v}"` : String(v);
+
+// op: "update" | "add" | "delete"
+async function writeRecord(kind: string, op: string, a: Any, h: Any): Promise<string> {
+  const spec = SPECS[kind], S = h.data || {};
+  const data = structuredClone(S); data[spec.coll] = Array.isArray(data[spec.coll]) ? data[spec.coll] : [];
+  const list: Any[] = data[spec.coll];
+  const logBase: Any = { evt: `${op}_${kind}`, dry_run: !!a.dry_run };
+  let msg: string;
+  if (op === "delete") {
+    const rec = findOne(list, a, spec.what);
+    if (a.confirm !== true && !a.dry_run) throw new Error("Deleting is permanent: call again with confirm: true (or use dry_run).");
+    data[spec.coll] = list.filter((x) => x.id !== rec.id);
+    logBase.record = rec.id; msg = `delete ${spec.what} "${rec.name}" (${rec.id})`;
+  } else {
+    const f: Any = a.fields || {};
+    if (typeof f !== "object" || Array.isArray(f)) throw new Error("fields must be an object.");
+    const keys = Object.keys(f);
+    const bad = keys.filter((k) => !spec.fields[k]);
+    if (bad.length) throw new Error(`Not editable: ${bad.join(", ")}. Editable: ${Object.keys(spec.fields).join(", ")}.`);
+    if (op === "update" && !keys.length) throw new Error("Give at least one field to change.");
+    if (op === "add" && !f.name) throw new Error("Give a name.");
+    const rec = op === "update" ? findOne(list, a, spec.what) : { id: uid(spec.prefix), ...spec.defaults(data) };
+    const before = { ...rec };
+    for (const k of keys) rec[k] = spec.fields[k](f[k], data);
+    spec.fix?.(rec, new Set(keys));
+    if (op === "add") list.push(rec);
+    const changes = Object.keys({ ...before, ...rec }).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(rec[k]));
+    logBase.record = rec.id; logBase.fields = changes;
+    msg = op === "add" ? `add ${spec.what} "${rec.name}" (${rec.id}): ` + Object.entries(rec).filter(([k]) => k !== "id").map(([k, v]) => `${k}=${show(v)}`).join(", ")
+      : `update ${spec.what} "${before.name}" (${rec.id}): ` + (changes.length ? changes.map((k) => `${k} ${show(before[k])} → ${show(rec[k])}`).join("; ") : "no change");
+    if (op === "update" && !changes.length) { console.log(JSON.stringify({ ...logBase, household: h.id, result: "no_change" })); return `Nothing to change: ${msg}.`; }
+  }
+  if (a.dry_run) { console.log(JSON.stringify({ ...logBase, household: h.id, version: h.version, result: "dry_run" })); return `Dry run, nothing saved. Would ${msg}.`; }
+  await saveHousehold(h, data, logBase);
+  return `Saved: ${msg}. Nothing else changed; phones pick it up on their next sync.`;
+}
+const WRITE_TOOLS: Record<string, [string, string]> = {
+  update_item: ["item", "update"], add_item: ["item", "add"], delete_item: ["item", "delete"],
+  update_debt: ["debt", "update"], add_debt: ["debt", "add"], delete_debt: ["debt", "delete"],
+  update_asset: ["asset", "update"], add_asset: ["asset", "add"], delete_asset: ["asset", "delete"],
+  update_category: ["category", "update"], add_category: ["category", "add"],
+  update_asset_category: ["asset_category", "update"], add_asset_category: ["asset_category", "add"],
+};
+
 // ---------- Tools ----------
+const ID_ARGS = { id: { type: "string", description: "Record id (see get_* tools)" }, name: { type: "string", description: "Exact name, if no id" } };
+const DRY = { dry_run: { type: "boolean", description: "Preview only, save nothing" } };
+const FIELD_DOCS: Record<string, Any> = {
+  item: { name: { type: "string" }, direction: { type: "string", enum: ["in", "out"], description: "in = earnings, out = expense" }, amount: { type: "number" },
+    frequency: { type: "string", enum: ["weekly", "fortnightly", "monthly", "quarterly", "term", "yearly", "everyX", "oneoff"] }, customWeeks: { type: ["number", "null"], description: "Only for everyX" },
+    categoryId: { type: "string", description: "Category id (earnings always c_income)" }, source: { type: "string", enum: ["statement", "statement_avg", "cash", "manual", "assumption", "calculated"] },
+    kind: { type: "string", enum: ["fixed", "variable", "oneoff"], description: "fixed = recurring; oneoff sets frequency oneoff" }, active: { type: "boolean", description: "false = archived, kept but not counted" },
+    review: { type: "boolean" }, provider: { type: "string" }, notes: { type: "string" }, startDate: { type: ["string", "null"], description: "YYYY-MM-DD" }, endDate: { type: ["string", "null"], description: "YYYY-MM-DD" } },
+  debt: { name: { type: "string" }, balance: { type: ["number", "null"] }, limit: { type: ["number", "null"] }, rate: { type: ["number", "null"], description: "% p.a." }, payment: { type: "number" },
+    frequency: { type: "string", enum: ["weekly", "fortnightly", "monthly", "quarterly", "term", "yearly", "everyX", "oneoff"] }, endDate: { type: ["string", "null"] }, active: { type: "boolean", description: "false = archived/paid off" }, notes: { type: "string" } },
+  asset: { name: { type: "string" }, value: { type: "number" }, type: { type: "string", description: "Asset category id (see get_assets / errors)" }, updated: { type: ["string", "null"], description: "Value as-at date; set to today automatically when value changes" }, notes: { type: "string" } },
+  category: { name: { type: "string" }, icon: { type: "string" }, type: { type: "string", enum: ["living", "debt", "tax", "savings", "business", "oneoff", "income", "transfer", "investment"] } },
+  asset_category: { name: { type: "string" }, icon: { type: "string" } },
+};
+const LABEL: Record<string, string> = { item: "budget line (earnings, expense or one-off)", debt: "debt", asset: "asset (incl. valuables)", category: "budget category", asset_category: "asset category" };
+function writeToolDefs() {
+  return Object.entries(WRITE_TOOLS).map(([tool, [kind, op]]) => {
+    const fields = { type: "object", properties: FIELD_DOCS[kind], additionalProperties: false, description: op === "add" ? "Fields for the new record (name required)" : "Only the fields to change" };
+    if (op === "delete") return { name: tool, description: `Permanently delete one ${LABEL[kind]}, like Delete in the app. Prefer update with active: false to archive. Needs confirm: true.`, inputSchema: { type: "object", properties: { ...ID_ARGS, confirm: { type: "boolean" }, ...DRY } } };
+    if (op === "add") return { name: tool, description: `Add one ${LABEL[kind]}, only when the user asks. Nothing else changes.`, inputSchema: { type: "object", properties: { fields, ...DRY }, required: ["fields"] } };
+    return { name: tool, description: `Change fields of one existing ${LABEL[kind]}, only when the user asks. Nothing else changes. Use dry_run to preview.`, inputSchema: { type: "object", properties: { ...ID_ARGS, fields, ...DRY }, required: ["fields"] } };
+  });
+}
+
 const VIEW = { type: "string", enum: ["weekly", "monthly", "yearly"], description: "Period for amounts (default weekly)" };
 const TOOLS = [
   { name: "get_budget_summary", description: "The household budget as readable text: totals (income, expenses, left over), every income and expense line by category with notes, one-offs, debts, assets and net worth. Start here.", inputSchema: { type: "object", properties: { period: VIEW } } },
   { name: "get_items", description: "Budget lines as JSON with amount, frequency, per-period value, category, source, dates and notes.", inputSchema: { type: "object", properties: { direction: { type: "string", enum: ["in", "out"], description: "in = income, out = expenses" }, category: { type: "string", description: "Category name (partial match)" }, include_inactive: { type: "boolean" }, period: VIEW } } },
-  { name: "get_debts", description: "All debts as JSON: balance, interest rate, repayment, frequency, limit, end date, notes, active.", inputSchema: { type: "object", properties: {} } },
+  { name: "get_debts", description: "All debts as JSON: id, balance, interest rate, repayment, frequency, limit, end date, notes, active.", inputSchema: { type: "object", properties: {} } },
   { name: "get_assets", description: "All assets as JSON with category, value and date last updated, plus totals and net worth.", inputSchema: { type: "object", properties: {} } },
   { name: "get_transactions", description: "Imported bank transactions (negative = money out). Filter by date range, category name or text search.", inputSchema: { type: "object", properties: { from: { type: "string", description: "YYYY-MM-DD" }, to: { type: "string", description: "YYYY-MM-DD" }, category: { type: "string" }, search: { type: "string" }, limit: { type: "number", description: "Default 200, max 2000" } } } },
   { name: "list_files", description: "Household files in the LifeCalc Files vault (statements, CSVs, screenshots, bills, payslips), newest as-at date first, with each file's AI summary and any ai_note (a difference between the file and the app's figures). Filter by folder, type, as-at date range, or linked budget line/asset.", inputSchema: { type: "object", properties: { folder: { type: "string", description: "The household's own folder name (or part of it), e.g. \"Bank statements\"; \"none\" for files not in a folder" }, type: { type: "string", enum: ["statement", "investment", "bill", "payslip", "other"] }, from: { type: "string", description: "YYYY-MM-DD (as-at date from)" }, to: { type: "string", description: "YYYY-MM-DD (as-at date to)" }, linked_to: { type: "string", description: "Budget line or asset: its id or part of its name" } } } },
@@ -142,6 +303,11 @@ const TOOLS = [
     as_at_date: { type: "string", description: "YYYY-MM-DD: statement end date, valuation date, bill issue date or pay date" },
     extracted_text: { type: "string", description: "Optional: key figures and transactions, one per line" },
     folder: { type: "string", description: "Optional: name of one of the household's folders (see get_budget_summary) to file it in" } }, required: ["id", "summary"] } },
+  { name: "update_debt_balance", description: "Change the balance owing of ONE existing debt (and optionally its note). Nothing else in the budget is changed. Identify the debt by id or exact name (see get_debts). Use dry_run: true to preview without saving.", inputSchema: { type: "object", properties: {
+    debt_id: { type: "string", description: "Debt id from get_debts" }, name: { type: "string", description: "Exact debt name (if no debt_id)" },
+    balance: { type: "number", description: "New balance owing in AUD (>= 0)" }, note: { type: "string", description: "Optional: replace the debt's note" },
+    dry_run: { type: "boolean", description: "Preview only, save nothing" } }, required: ["balance"] } },
+  ...writeToolDefs(),
   { name: "get_monthly_spending", description: "Actual bank spending by category for each month (excludes internal transfers, cash deposits and investments), plus money in.", inputSchema: { type: "object", properties: { months: { type: "number", description: "How many recent months (default 6)" } } } },
 ];
 
@@ -154,15 +320,15 @@ function callTool(name: string, a: Any, S: Any, hname: string): string {
     const rows = byOrder(S.items || []).filter((i: Any) =>
       (!a.direction || i.direction === a.direction) && (a.include_inactive || !excluded(S, i) || excluded(S, i) === "one-off") &&
       (!q || catName(i.categoryId).toLowerCase().includes(q)))
-      .map((i: Any) => ({ name: i.name, direction: i.direction, category: catName(i.categoryId), amount: Number(i.amount) || 0, frequency: i.frequency, every_weeks: i.customWeeks || undefined,
+      .map((i: Any) => ({ id: i.id, name: i.name, direction: i.direction, category: catName(i.categoryId), category_id: i.categoryId, kind: i.kind, amount: Number(i.amount) || 0, frequency: i.frequency, every_weeks: i.customWeeks || undefined,
         [view]: Math.round(per(i.amount, i.frequency, i.customWeeks, view) * 100) / 100, source: SOURCE[i.source] || i.source, counted: !excluded(S, i), not_counted_reason: excluded(S, i) || undefined,
         start: i.startDate || undefined, end: i.endDate || undefined, needs_review: i.review || undefined, notes: i.notes || undefined }));
     return JSON.stringify(rows, null, 1);
   }
-  if (name === "get_debts") return JSON.stringify(byOrder(S.debts || []).map((d: Any) => ({ name: d.name, balance: d.balance ?? null, rate_pct: d.rate ?? null, repayment: d.payment ?? null, frequency: d.frequency, limit: d.limit || null, end: d.endDate || null, active: d.active !== false, notes: d.notes || undefined })), null, 1);
+  if (name === "get_debts") return JSON.stringify(byOrder(S.debts || []).map((d: Any) => ({ id: d.id, name: d.name, balance: d.balance ?? null, rate_pct: d.rate ?? null, repayment: d.payment ?? null, frequency: d.frequency, limit: d.limit || null, end: d.endDate || null, active: d.active !== false, notes: d.notes || undefined })), null, 1);
   if (name === "get_assets") {
     const cats = Object.fromEntries((S.assetCats || []).map((c: Any) => [c.id, c.name]));
-    return JSON.stringify({ assets: (S.assets || []).map((x: Any) => ({ name: x.name, category: cats[x.type] || x.type, value: Number(x.value) || 0, updated: x.updated || null, notes: x.notes || undefined })), totals: Object.fromEntries(Object.entries(netWorth(S)).map(([k, v]) => [k, typeof v === "number" ? Math.round(v * 100) / 100 : v])) }, null, 1);
+    return JSON.stringify({ assets: (S.assets || []).map((x: Any) => ({ id: x.id, name: x.name, category: cats[x.type] || x.type, category_id: x.type, value: Number(x.value) || 0, updated: x.updated || null, notes: x.notes || undefined })), totals: Object.fromEntries(Object.entries(netWorth(S)).map(([k, v]) => [k, typeof v === "number" ? Math.round(v * 100) / 100 : v])) }, null, 1);
   }
   if (name === "get_transactions") {
     const q = String(a.search || "").toLowerCase(), c = String(a.category || "").toLowerCase();
@@ -320,10 +486,31 @@ async function fileTool(name: string, a: Any, h: Any): Promise<string | Any[]> {
   throw new Error("Unknown tool: " + name);
 }
 
+// ---------- Debt balance write ----------
+async function updateDebtBalance(a: Any, h: Any): Promise<string> {
+  const bal = typeof a.balance === "number" ? a.balance : NaN;
+  if (!Number.isFinite(bal) || bal < 0 || bal > 1e9) throw new Error("balance must be a finite number >= 0.");
+  const newBal = Math.round(bal * 100) / 100;
+  if (a.note !== undefined && typeof a.note !== "string") throw new Error("note must be text.");
+  const S = h.data || {}, debts: Any[] = Array.isArray(S.debts) ? S.debts : [];
+  const hits = a.debt_id ? debts.filter((d) => d && d.id === String(a.debt_id)) : a.name ? debts.filter((d) => d && d.name === String(a.name)) : [];
+  if (!a.debt_id && !a.name) throw new Error("Give debt_id or the exact debt name (see get_debts).");
+  if (hits.length !== 1) throw new Error(hits.length ? "More than one debt has that name; use debt_id." : "No such debt. Debts: " + debts.map((d) => `${d.name} (${d.id})`).join(", "));
+  const d = hits[0], oldBal = d.balance ?? null, note = a.note === undefined ? undefined : String(a.note).trim().slice(0, 1000);
+  const log = (result: string) => console.log(JSON.stringify({ evt: "update_debt_balance", household: h.id, debt: d.id, version: h.version, old: oldBal, new: newBal, note_changed: note !== undefined && note !== (d.notes || ""), dry_run: !!a.dry_run, result }));
+  const preview = `${d.name}: balance ${oldBal == null ? "not set" : money(Number(oldBal), 2)} → ${money(newBal, 2)}` + (note !== undefined ? `; note → "${note}"` : "");
+  if (a.dry_run) { log("dry_run"); return `Dry run, nothing saved. Would change ${preview}.`; }
+  const data = structuredClone(S), rec = data.debts.find((x: Any) => x && x.id === d.id);
+  rec.balance = newBal;
+  if (note !== undefined) rec.notes = note;
+  await saveHousehold(h, data, { evt: "update_debt_balance", debt: d.id, old: oldBal, new: newBal, note_changed: note !== undefined && note !== (d.notes || ""), dry_run: false });
+  return `Saved. ${preview}. Nothing else changed; phones pick it up on their next sync.`;
+}
+
 // ---------- MCP over HTTP ----------
 async function loadHousehold(token: string) {
   if (!/^[a-f0-9]{64}$/.test(token)) return null;
-  const r = await fetch(`${SB_URL}/rest/v1/households?ai_token=eq.${token}&select=id,name,data`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
+  const r = await fetch(`${SB_URL}/rest/v1/households?ai_token=eq.${token}&select=id,name,version,data`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
   if (!r.ok) return null;
   const rows = await r.json();
   return rows[0] || null;
@@ -337,17 +524,23 @@ async function handle(msg: Any, token: string) {
     return reply(id, {
       protocolVersion: params.protocolVersion || "2025-03-26",
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "lifecalc", title: "LifeCalc Budget", version: "1.2.0" },
-      instructions: "Read-only access to the user's household budget in LifeCalc (amounts in AUD). Call get_budget_summary first, then the other tools for detail. Uploaded statements, bills, payslips and screenshots are in the Files vault (list_files / get_file / read_file). If files haven't been read yet, read each one with read_file and save a short summary with save_file_summary (it only fills in the file's summary, never budget numbers). Give practical, specific advice using the actual figures.",
+      serverInfo: { name: "lifecalc", title: "LifeCalc Budget", version: "1.4.0" },
+      instructions: "Access to the user's household budget in LifeCalc (amounts in AUD). Call get_budget_summary first, then the other tools for detail. Uploaded statements, bills, payslips and screenshots are in the Files vault (list_files / get_file / read_file). If files haven't been read yet, read each one with read_file and save a short summary with save_file_summary (it only fills in the file's summary, never budget numbers). You can change the budget only when the user asks: update_/add_ tools for budget lines, debts, assets and categories (one record per call; preview with dry_run when unsure), archive with active: false, delete only with confirm: true. Ariel's HQ café group data: get_hq_overview / get_hq_location / get_hq_deadlines; HQ write tools change only HQ records and only when the user asks. Give practical, specific advice using the actual figures.",
     });
   }
   if (method === "ping") return reply(id, {});
-  if (method === "tools/list") return reply(id, { tools: TOOLS });
+  if (method === "tools/list") return reply(id, { tools: [...TOOLS, ...HQ_TOOLS] });
   if (method === "tools/call") {
     const h = await loadHousehold(token);
     if (!h) return reply(id, { content: [{ type: "text", text: "This LifeCalc link is no longer valid. Create a new one in LifeCalc → Settings → Connect AI." }], isError: true });
     try {
       const args = params.arguments || {};
+      // Ariel's HQ (hq.ts): reads use the loaded data; writes re-read and change only data.hqLocations.
+      if (HQ_TOOL_NAMES.includes(params.name)) {
+        return reply(id, { content: [{ type: "text", text: await hqTool(params.name, args, h.data || {}, restStore(SB_URL, svcHeaders(), h.id)) }] });
+      }
+      if (WRITE_TOOLS[params.name]) return reply(id, { content: [{ type: "text", text: await writeRecord(WRITE_TOOLS[params.name][0], WRITE_TOOLS[params.name][1], args, h) }] });
+      if (params.name === "update_debt_balance") return reply(id, { content: [{ type: "text", text: await updateDebtBalance(args, h) }] });
       if (["list_files", "get_file", "read_file", "save_file_summary"].includes(params.name)) {
         const out = await fileTool(params.name, args, h);
         return reply(id, { content: typeof out === "string" ? [{ type: "text", text: out }] : out });
