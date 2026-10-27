@@ -113,7 +113,7 @@
   }
 
   // ---------- Render ----------
-  var TABS = ['budget', 'transactions', 'debts', 'more'];
+  var TABS = ['hq', 'budget', 'transactions', 'debts', 'more'];
   var PAGE_TAB = { category: 'budget', networth: 'budget', assets: 'budget', debts: 'budget', files: 'budget', reports: 'more' };
   function render() {
     var th = S.settings.theme || 'auto';
@@ -122,7 +122,7 @@
     var tab = TABS.indexOf(S.settings.tab) >= 0 ? S.settings.tab : 'budget';
     var html;
     if (ui.page) html = { category: renderCategory, networth: renderNetWorth, assets: renderAssets, debts: renderDebts, reports: renderReports, files: function () { return HF.files.render(ui.page.id); } }[ui.page.name]();
-    else html = { budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab]();
+    else html = { hq: function () { return HF.hq.render(); }, budget: renderBudget, transactions: renderTransactions, debts: renderDebts, more: renderMore }[tab]();
     $app.innerHTML = html;
     if (location.hash.slice(1) !== tab) history.replaceState(null, '', '#' + tab);
   }
@@ -138,6 +138,7 @@
     m.innerHTML = item('Basic', '±÷', { href: '../#basic' }) + item('Scientific', '<i>f</i>(x)', { href: '../#sci' }) + item('Convert', '⇆', { href: '../#convert' }) +
       '<div class="sep"></div>' +
       item('Budget', icon('pie', 18), { 'data-act': 'tab', 'data-val': 'budget' }, tab === 'budget') +
+      item('Ariel’s HQ', icon('coffee', 18), { 'data-act': 'tab', 'data-val': 'hq' }, tab === 'hq') +
       item('Settings', icon('gear', 18), { 'data-act': 'tab', 'data-val': 'more' }, tab === 'more' || tab === 'transactions');
     document.body.appendChild(m);
     var r = btn.getBoundingClientRect();
@@ -1344,6 +1345,15 @@
   // Hooks for sync.js: read the state, replace it with the shared copy, refresh the status.
   window.LCBudget = {
     get: function () { return S; },
+    saveHQ: function (cafe) {
+      var before = S.hqLocations;
+      var list = (before || []).slice(), i = list.findIndex(function (c) { return c.id === cafe.id; });
+      if (i < 0) list.push(cafe); else list[i] = cafe;
+      S.hqLocations = list;
+      if (!HF.save(S)) { S.hqLocations = before; toast('Could not save — storage is full or blocked'); return false; }
+      if (HF.sync) HF.sync.changed();
+      render(); return true;
+    },
     render: function () { render(); },
     // Shared UI helpers for files.js
     ui: { top: top, esc: esc, toast: toast, openSheet: openSheet, closeSheet: function () { closeSheet(); }, empty: emptyBlock },

@@ -1,0 +1,25 @@
+const assert=require('node:assert/strict');
+const C=require('../js/hq/core');
+const base={name:'Example',sales:[{start:'2026-01-01',amount:22000,frequency:'weekly',gst:'included'}],fees:[{start:'2026-01-01',amount:6,type:'percent',basis:'excluded',gst:'excluded'}],costs:[{name:'Rent',amount:1100,frequency:'weekly',gst:'included'},{name:'Outgoings',amount:100,frequency:'weekly',gst:'excluded'},{name:'Marketing',amount:50,frequency:'weekly',gst:'excluded'}]};
+const clone=()=>structuredClone(base), calc=c=>C.calculate(c,'2026-10-27'), near=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`);
+let c=clone(),n=calc(c);near(C.convert(n.fees.net,'weekly'),1200);near(C.convert(n.fees.gst,'weekly'),120);near(n.ratio,5.75);
+c.fees[0].basis='included';near(C.convert(calc(c).fees.net,'weekly'),1320);
+c=clone();c.fees=[{start:'2026-01-01',amount:550,frequency:'weekly',type:'fixed',gst:'included'}];near(C.convert(calc(c).fees.net,'weekly'),500);c.sales=[];near(C.convert(calc(c).fees.net,'weekly'),500);assert.equal(calc(c).ratio,null);
+c.fees.push({start:'2026-11-01',amount:660,frequency:'weekly',type:'fixed',gst:'included'});near(C.convert(calc(c).fees.net,'weekly'),500);near(C.convert(C.calculate(c,'2026-11-01').fees.net,'weekly'),600);
+c.discounts=[{start:'2026-10-01',end:'2026-10-27',type:'percent',amount:50}];near(C.convert(calc(c).fees.net,'weekly'),250);near(C.convert(C.calculate(c,'2026-10-28').fees.net,'weekly'),500);
+c.discounts[0].type='replace';c.discounts[0].amount=220;c.discounts[0].frequency='weekly';near(C.convert(calc(c).fees.net,'weekly'),200);
+c.discounts[0].type='amount';near(C.convert(calc(c).fees.net,'weekly'),300);
+c.discounts.push({...c.discounts[0]});assert.match(C.validate(c),/overlap/);
+c=clone();c.costs[1].included=true;near(calc(c).ratio,5.25);c.costs[2].amount='';assert.equal(calc(c).complete,false);assert.equal(calc(c).ratio,null);
+c.sales[0].amount=0;assert.equal(calc(c).ratio,null);near(calc(c).fees.net,0);c.sales[0].amount='';assert.equal(calc(c).fees.net,null);
+assert.equal(C.countdown('2028-11-26','2026-10-27'),'2 years, 30 days');assert.equal(C.countdown('2026-10-27','2026-10-27'),'Today');assert.equal(C.countdown('2026-10-26','2026-10-27'),'1 day overdue');
+c=clone();c.lease={expiry:'2028-10-27',options:[{years:5,status:'pending',deadline:'2026-12-01'}]};assert.equal(C.actions(c,'2026-10-27')[0].label,'Option deadline');c.lease.options[0].status='confirmed';assert.equal(C.actions(c,'2026-10-27')[0].label,'Lease expiry');
+c=clone();c.fees.push({...c.fees[0]});assert.match(C.validate(c),/different effective/);
+near(C.convert(C.annual(100,'weekly'),'monthly'),5200/12);near(C.convert(C.annual(1200,'monthly'),'yearly'),14400);
+console.log('HQ calculations: 25 assertions passed');
+// Exercise the actual sync merge without any live account or network calls.
+const vm=require('node:vm'),fs=require('node:fs');
+const ctx={HF:{},localStorage:{getItem:()=>null},addEventListener:()=>{},document:{addEventListener:()=>{}},navigator:{onLine:true}};ctx.window=ctx;vm.createContext(ctx);vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../js/sync.js'),'utf8'),ctx);
+const b={hqLocations:[{id:'a',name:'A'},{id:'b',name:'B'}],items:[{id:'x',amount:10}],settings:{}},local=structuredClone(b),remote=structuredClone(b);local.hqLocations[0].name='A edited';remote.hqLocations[1].name='B edited';remote.items[0].amount=20;
+const merged=ctx.HF.sync.merge(b,local,remote);assert.equal(merged.hqLocations[0].name,'A edited');assert.equal(merged.hqLocations[1].name,'B edited');assert.equal(merged.items[0].amount,20);
+console.log('HQ sync merge preserves concurrent café and budget edits');
