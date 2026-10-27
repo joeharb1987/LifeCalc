@@ -132,18 +132,8 @@
     if(act==='add-record'){b.previousElementSibling.insertAdjacentHTML('beforeend',record(id));b.closest('form').dispatchEvent(new Event('hq-record-change'));}
     if(act==='remove-record'){const f=b.closest('form');b.closest('[data-kind]').remove();f.dispatchEvent(new Event('hq-record-change'));}
   });
-  // Page-only horizontal gestures. Existing Budget row deletion, sheets and controls keep their gestures.
-  let swipe=null;
-  const ignored='.sheet,.scrim,input,select,textarea,button,a,.swipe,.grip,.seg,.app-menu,#pop';
-  document.addEventListener('touchstart',e=>{
-    const tab=app().get().settings.tab;
-    if(e.touches.length!==1||!['budget','hq'].includes(tab)||app().canBack()||e.target.closest(ignored)){swipe=null;return;}
-    swipe={x:e.touches[0].clientX,y:e.touches[0].clientY,tab};
-  },{passive:true});
-  document.addEventListener('touchmove',e=>{if(!swipe)return;const dx=e.touches[0].clientX-swipe.x,dy=e.touches[0].clientY-swipe.y;if(Math.abs(dy)>20&&Math.abs(dy)>Math.abs(dx)){swipe=null;return;}if(Math.abs(dx)>30&&Math.abs(dx)>Math.abs(dy)*1.8&&((swipe.tab==='budget'&&dx<0)||(swipe.tab==='hq'&&dx>0))){e.preventDefault();window.__lcNavSwipe=true;}},{passive:false});
-  document.addEventListener('touchend',e=>{if(!swipe)return;const s=swipe;swipe=null;const dx=e.changedTouches[0].clientX-s.x,dy=e.changedTouches[0].clientY-s.y;if(Math.abs(dx)>80&&Math.abs(dx)>Math.abs(dy)*1.8){if(s.tab==='budget'&&dx<0)location.hash='hq';if(s.tab==='hq'&&dx>0){if(selected){selected=null;app().render();}else location.hash='budget';}}setTimeout(()=>{window.__lcNavSwipe=false;},0);});
-  document.addEventListener('touchcancel',()=>{swipe=null;window.__lcNavSwipe=false;});
+  // Swiping between Budget and HQ is handled by the shared page carousel (nav-swipe.js).
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&app().get().settings.tab==='hq')app().render();});
   setInterval(()=>{if(app().get().settings.tab==='hq'&&!document.getElementById('sheet'))app().render();},60000);
-  H.hq={render,back:()=>{if(!selected)return false;selected=null;app().render();return true;}};
+  H.hq={render,hasDetail:()=>!!selected,back:()=>{if(!selected)return false;selected=null;app().render();return true;}};
 })();
