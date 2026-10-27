@@ -1303,10 +1303,23 @@ html{background:#000;}
     clipMenu.hidden = true;
     pasteNumber(text);
   }
+  // A hold belongs to iPhone's own Paste menu, so ours stays out of the way; a quick tap shows ours.
+  var holdTimer = null, held = false;
+  nativePaste.addEventListener('touchstart', function(){
+    held = false;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(function(){ held = true; clipMenu.hidden = true; }, 350);
+  }, { passive: true });
+  ['touchend', 'touchcancel', 'touchmove'].forEach(function(ev){
+    nativePaste.addEventListener(ev, function(){ clearTimeout(holdTimer); }, { passive: true });
+  });
   nativePaste.addEventListener('click', function(){
+    if (held) { held = false; return; }
     nativePaste.blur();
     if (clipMenu.hidden) showClipMenu(); else clipMenu.hidden = true;
   });
+  // Our bubble's Paste can bring up iPhone's paste confirmation; never show both menus.
+  nativePaste.addEventListener('focus', function(){ if (held) clipMenu.hidden = true; });
   nativePaste.addEventListener('paste', function(e){
     var cd = e.clipboardData || window.clipboardData;
     var t = cd && cd.getData ? (cd.getData('text/plain') || cd.getData('text') || htmlToText(cd.getData('text/html') || '')) : '';
