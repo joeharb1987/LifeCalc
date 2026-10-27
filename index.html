@@ -121,6 +121,11 @@ button.key.k-op.operator-active{background:var(--op-active-bg)!important;color:v
 .k-sci sub{font-size:.62em;}
 .angle-badge{position:absolute;left:calc((100% - (4 * var(--key) + 3 * var(--gap))) / 2 + 6px);bottom:22px;font-size:15px;color:var(--text-dim);}
 .angle-badge[hidden]{display:none;}
+/* Invisible field over the number: holding it brings up iPhone's own Paste, which works from any app. */
+.native-paste{position:absolute;left:0;right:0;bottom:6px;height:80px;z-index:5;margin:0;padding:0;border:0;outline:0;
+  background:transparent;color:transparent;caret-color:transparent;font-size:16px;opacity:1;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;-webkit-user-select:text;user-select:text;}
+.native-paste::placeholder{color:transparent;}
 .clip-menu{position:absolute;z-index:35;display:flex;background:#3A3A3C;border-radius:9px;box-shadow:0 6px 20px rgba(0,0,0,.45);animation:clipIn .12s ease-out;}
 .clip-menu::after{content:"";position:absolute;bottom:-6px;right:var(--arrow,24px);border:6px solid transparent;border-bottom:0;border-top-color:#3A3A3C;}
 @keyframes clipIn{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:none;}}
@@ -204,12 +209,13 @@ html{background:#000;}
   </div>
 
   <div class="paste-overlay" id="pasteOverlay">
-    <input type="text" id="pasteInput" inputmode="decimal" autocomplete="off" placeholder="Tap and hold to paste a number">
+    <input type="text" id="pasteInput" inputmode="none" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Tap and hold here, then Paste">
   </div>
 
   <div class="display" id="displayPanel">
     <div class="expr" id="exprEl">&nbsp;</div>
     <div class="result" id="resultEl">0</div>
+    <input class="native-paste" id="nativePaste" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Number. Tap for Copy and Paste, or hold to paste" tabindex="-1">
     <div class="toast" id="toastEl">Copied</div>
     <div class="angle-badge" id="angleBadge" hidden>Rad</div>
     <div class="clip-menu" id="clipMenu" role="menu" hidden><button id="clipCopy" role="menuitem">Copy</button><button id="clipPaste" role="menuitem">Paste</button></div>
@@ -1227,7 +1233,7 @@ html{background:#000;}
   resultEl.addEventListener('click', function(){ if (clipMenu.hidden) showClipMenu(); else clipMenu.hidden = true; });
   resultEl.addEventListener('contextmenu', function(e){ e.preventDefault(); showClipMenu(); });
   document.addEventListener('click', function(e){
-    if (!clipMenu.hidden && !clipMenu.contains(e.target) && e.target !== resultEl) clipMenu.hidden = true;
+    if (!clipMenu.hidden && !clipMenu.contains(e.target) && e.target !== resultEl && e.target !== nativePaste) clipMenu.hidden = true;
   });
   // Tap the formula above an answer to bring it back and keep editing it.
   exprEl.addEventListener('click', function(){
@@ -1245,8 +1251,18 @@ html{background:#000;}
     copyText(v === null || isNaN(v) ? resultEl.textContent : String(Number(v.toPrecision(15))));
     clipMenu.hidden = true;
   });
+  // Pull a number out of whatever was copied: "$1,234.50", "AUD 99", "(250.00)", "−3", "12.5%" etc.
+  function parsePasted(text){
+    var t = String(text == null ? '' : text).replace(/[\u00a0\u2009\u202f]/g, ' ').replace(/[\u2212\u2013\u2014]/g, '-');
+    var m = t.match(/(\(\s*)?(-\s*)?[$\u00a3\u20ac]?\s*(\d[\d,]*(?:\.\d+)?|\.\d+)/);
+    if (!m) return NaN;
+    var num = parseFloat(m[3].replace(/,/g, ''));
+    if (isNaN(num)) return NaN;
+    if (m[2] || (m[1] && /\)/.test(t.slice(m.index + m[0].length)))) num = -num;
+    return num;
+  }
   function pasteNumber(text){
-    var num = parseFloat(String(text).replace(/[,$\s]/g, '').replace(/\u2212/g, '-'));
+    var num = typeof text === 'number' ? text : parsePasted(text);
     if (isNaN(num)) { showToast('No number to paste'); return; }
     takePendingFn();
     beginInput(false);
@@ -1254,11 +1270,62 @@ html{background:#000;}
     display += operandText(num);
     updateDisplay();
   }
+  function htmlToText(h){ var d = document.createElement('div'); d.innerHTML = h; return d.textContent || ''; }
+  // Try every way the browser offers to read the clipboard, plain text first, then rich (web page) text.
+  function readClipboard(){
+    var c = navigator.clipboard;
+    if (!c) return Promise.reject(new Error('no clipboard'));
+    var viaText = c.readText ? c.readText().then(function(t){ if (t && t.trim()) return t; throw new Error('empty'); }) : Promise.reject(new Error('no readText'));
+    return viaText.catch(function(){
+      if (!c.read) throw new Error('no read');
+      return c.read().then(function(items){
+        var item = items && items[0];
+        if (!item) throw new Error('empty');
+        if (item.types.indexOf('text/plain') !== -1) return item.getType('text/plain').then(function(b){ return b.text(); });
+        if (item.types.indexOf('text/html') !== -1) return item.getType('text/html').then(function(b){ return b.text(); }).then(htmlToText);
+        throw new Error('no text');
+      });
+    });
+  }
   document.getElementById('clipPaste').addEventListener('click', function(){
     clipMenu.hidden = true;
-    if (navigator.clipboard && navigator.clipboard.readText) {
-      navigator.clipboard.readText().then(pasteNumber).catch(function(){ pasteTarget = 'calc'; pasteOverlay.classList.add('open'); pasteInput.value = ''; pasteInput.focus(); });
-    } else { pasteTarget = 'calc'; pasteOverlay.classList.add('open'); pasteInput.value = ''; pasteInput.focus(); }
+    readClipboard().then(pasteNumber).catch(function(){
+      // iPhone only lets a home-screen app read text from other apps through its own Paste button.
+      showToast('Hold the number, then tap Paste');
+    });
+  });
+
+  // The invisible field over the number. Tap = our Copy | Paste bubble; hold = iPhone's own Paste.
+  var nativePaste = document.getElementById('nativePaste');
+  function takeNativePaste(text){
+    nativePaste.value = '';
+    nativePaste.blur();
+    clipMenu.hidden = true;
+    pasteNumber(text);
+  }
+  nativePaste.addEventListener('click', function(){
+    nativePaste.blur();
+    if (clipMenu.hidden) showClipMenu(); else clipMenu.hidden = true;
+  });
+  nativePaste.addEventListener('paste', function(e){
+    var cd = e.clipboardData || window.clipboardData;
+    var t = cd && cd.getData ? (cd.getData('text/plain') || cd.getData('text') || htmlToText(cd.getData('text/html') || '')) : '';
+    e.preventDefault();
+    takeNativePaste(t);
+  });
+  nativePaste.addEventListener('input', function(){ var v = nativePaste.value; if (v.trim()) takeNativePaste(v); else nativePaste.value = ''; });
+  nativePaste.addEventListener('keydown', function(e){ if (!(e.metaKey || e.ctrlKey)) e.preventDefault(); });
+  // Computer keyboard: Cmd/Ctrl+V anywhere on the calculator pastes into it.
+  document.addEventListener('paste', function(e){
+    if (e.defaultPrevented) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (currentMode === 'convert') return;
+    var cd = e.clipboardData || window.clipboardData;
+    var txt = cd && cd.getData ? (cd.getData('text/plain') || cd.getData('text') || htmlToText(cd.getData('text/html') || '')) : '';
+    if (!txt) return;
+    e.preventDefault();
+    pasteNumber(txt);
   });
 
   var pasteTarget='calc';
@@ -1272,22 +1339,30 @@ html{background:#000;}
     });
   }
 
+  function applyPaste(text){
+    var num=parsePasted(text);
+    pasteOverlay.classList.remove('open');
+    pasteInput.value='';
+    pasteInput.blur();
+    if (isNaN(num)){ showToast('No number to paste'); return; }
+    if (pasteTarget==='convert'){
+      convValueInput.value=num.toString();
+      updateConversion();
+    }else{
+      pasteNumber(num);
+    }
+    showToast('Pasted');
+  }
+  // Read the clipboard straight from the paste event, so text copied from a web page
+  // (which arrives with formatting, $ signs and commas) is handled the same as plain numbers.
+  pasteInput.addEventListener('paste',function(e){
+    var cd=e.clipboardData||window.clipboardData;
+    var t=cd&&cd.getData?cd.getData('text/plain')||cd.getData('text'):'';
+    if (t){ e.preventDefault(); applyPaste(t); }
+  });
   pasteInput.addEventListener('input',function(){
     var v=pasteInput.value.trim();
-    var num=parseFloat(v.replace(/,/g,''));
-
-    if (!isNaN(num)){
-      if (pasteTarget==='convert'){
-        convValueInput.value=num.toString();
-        updateConversion();
-      }else{
-        pasteNumber(num);
-      }
-
-      pasteOverlay.classList.remove('open');
-      pasteInput.blur();
-      showToast('Pasted');
-    }
+    if (v) applyPaste(v);
   });
 
   pasteInput.addEventListener('blur',function(){
